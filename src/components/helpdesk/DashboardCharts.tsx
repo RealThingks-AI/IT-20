@@ -140,23 +140,45 @@ export function DashboardCharts() {
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <Skeleton className="h-5 w-32" />
-          </CardHeader>
-          <CardContent>
-            <Skeleton className="h-[200px] w-full" />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <Skeleton className="h-5 w-32" />
-          </CardHeader>
-          <CardContent>
-            <Skeleton className="h-[200px] w-full" />
-          </CardContent>
-        </Card>
+      <div className="space-y-6">
+        {/* KPI Cards Skeleton - matches exact structure */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => (
+            <Card key={i}>
+              <CardContent className="pt-4">
+                <Skeleton className="h-8 w-16 mb-1" />
+                <Skeleton className="h-3 w-32" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        {/* Charts Skeleton - matches exact structure */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-5 w-40" />
+            </CardHeader>
+            <CardContent>
+              <div className="h-[250px] w-full bg-muted/50 rounded-md" />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-5 w-36" />
+            </CardHeader>
+            <CardContent>
+              <div className="h-[250px] w-full bg-muted/50 rounded-md" />
+            </CardContent>
+          </Card>
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <Skeleton className="h-5 w-36" />
+            </CardHeader>
+            <CardContent>
+              <div className="h-[200px] w-full bg-muted/50 rounded-md" />
+            </CardContent>
+          </Card>
+        </div>
       </div>
     );
   }
@@ -165,36 +187,36 @@ export function DashboardCharts() {
     <div className="space-y-6">
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card>
+        <Card className="min-h-[76px]">
           <CardContent className="pt-4">
-            <div className="text-2xl font-bold text-primary">
+            <div className="text-2xl font-bold text-primary min-h-[32px]">
               {chartData?.kpis.avgResolutionTime || 0}h
             </div>
-            <p className="text-xs text-muted-foreground">Avg Resolution Time (MTTR)</p>
+            <p className="text-xs text-muted-foreground min-h-[16px]">Avg Resolution Time (MTTR)</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="min-h-[76px]">
           <CardContent className="pt-4">
-            <div className="text-2xl font-bold text-primary">
+            <div className="text-2xl font-bold text-primary min-h-[32px]">
               {chartData?.kpis.avgFirstResponse || 0}h
             </div>
-            <p className="text-xs text-muted-foreground">Avg First Response</p>
+            <p className="text-xs text-muted-foreground min-h-[16px]">Avg First Response</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="min-h-[76px]">
           <CardContent className="pt-4">
-            <div className="text-2xl font-bold text-primary">
+            <div className="text-2xl font-bold text-primary min-h-[32px]">
               {chartData?.kpis.slaCompliance || 0}%
             </div>
-            <p className="text-xs text-muted-foreground">SLA Compliance</p>
+            <p className="text-xs text-muted-foreground min-h-[16px]">SLA Compliance</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="min-h-[76px]">
           <CardContent className="pt-4">
-            <div className="text-2xl font-bold text-primary">
+            <div className="text-2xl font-bold text-primary min-h-[32px]">
               {chartData?.kpis.resolutionRate || 0}%
             </div>
-            <p className="text-xs text-muted-foreground">Resolution Rate</p>
+            <p className="text-xs text-muted-foreground min-h-[16px]">Resolution Rate</p>
           </CardContent>
         </Card>
       </div>
