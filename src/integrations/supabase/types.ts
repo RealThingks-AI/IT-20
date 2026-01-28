@@ -1775,6 +1775,60 @@ export type Database = {
           },
         ]
       }
+      itam_asset_documents: {
+        Row: {
+          asset_id: string
+          created_at: string | null
+          document_type: string | null
+          file_path: string
+          file_size: number | null
+          id: string
+          mime_type: string | null
+          name: string
+          organisation_id: string | null
+          uploaded_by: string | null
+        }
+        Insert: {
+          asset_id: string
+          created_at?: string | null
+          document_type?: string | null
+          file_path: string
+          file_size?: number | null
+          id?: string
+          mime_type?: string | null
+          name: string
+          organisation_id?: string | null
+          uploaded_by?: string | null
+        }
+        Update: {
+          asset_id?: string
+          created_at?: string | null
+          document_type?: string | null
+          file_path?: string
+          file_size?: number | null
+          id?: string
+          mime_type?: string | null
+          name?: string
+          organisation_id?: string | null
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "itam_asset_documents_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "itam_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "itam_asset_documents_organisation_id_fkey"
+            columns: ["organisation_id"]
+            isOneToOne: false
+            referencedRelation: "organisations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       itam_asset_history: {
         Row: {
           action: string
@@ -1839,17 +1893,147 @@ export type Database = {
           },
         ]
       }
+      itam_asset_links: {
+        Row: {
+          child_asset_id: string
+          created_at: string | null
+          created_by: string | null
+          id: string
+          link_type: string | null
+          notes: string | null
+          organisation_id: string | null
+          parent_asset_id: string
+        }
+        Insert: {
+          child_asset_id: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          link_type?: string | null
+          notes?: string | null
+          organisation_id?: string | null
+          parent_asset_id: string
+        }
+        Update: {
+          child_asset_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          link_type?: string | null
+          notes?: string | null
+          organisation_id?: string | null
+          parent_asset_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "itam_asset_links_child_asset_id_fkey"
+            columns: ["child_asset_id"]
+            isOneToOne: false
+            referencedRelation: "itam_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "itam_asset_links_organisation_id_fkey"
+            columns: ["organisation_id"]
+            isOneToOne: false
+            referencedRelation: "organisations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "itam_asset_links_parent_asset_id_fkey"
+            columns: ["parent_asset_id"]
+            isOneToOne: false
+            referencedRelation: "itam_assets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      itam_asset_reservations: {
+        Row: {
+          asset_id: string
+          created_at: string | null
+          end_date: string
+          id: string
+          notes: string | null
+          organisation_id: string | null
+          purpose: string | null
+          reserved_by: string | null
+          reserved_for: string | null
+          reserved_for_name: string | null
+          start_date: string
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          asset_id: string
+          created_at?: string | null
+          end_date: string
+          id?: string
+          notes?: string | null
+          organisation_id?: string | null
+          purpose?: string | null
+          reserved_by?: string | null
+          reserved_for?: string | null
+          reserved_for_name?: string | null
+          start_date: string
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          asset_id?: string
+          created_at?: string | null
+          end_date?: string
+          id?: string
+          notes?: string | null
+          organisation_id?: string | null
+          purpose?: string | null
+          reserved_by?: string | null
+          reserved_for?: string | null
+          reserved_for_name?: string | null
+          start_date?: string
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "itam_asset_reservations_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "itam_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "itam_asset_reservations_organisation_id_fkey"
+            columns: ["organisation_id"]
+            isOneToOne: false
+            referencedRelation: "organisations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "itam_asset_reservations_reserved_for_fkey"
+            columns: ["reserved_for"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       itam_assets: {
         Row: {
           asset_id: string
           asset_tag: string | null
           assigned_to: string | null
           category_id: string | null
+          check_out_notes: string | null
+          checked_out_at: string | null
+          checked_out_to: string | null
           created_at: string | null
           created_by: string | null
           custom_fields: Json | null
           department_id: string | null
+          depreciation_method: string | null
           description: string | null
+          expected_return_date: string | null
           id: string
           is_active: boolean | null
           location_id: string | null
@@ -1860,11 +2044,14 @@ export type Database = {
           organisation_id: string | null
           purchase_date: string | null
           purchase_price: number | null
+          qr_code: string | null
+          salvage_value: number | null
           serial_number: string | null
           status: string | null
           tenant_id: number | null
           updated_at: string | null
           updated_by: string | null
+          useful_life_years: number | null
           vendor_id: string | null
           warranty_expiry: string | null
         }
@@ -1873,11 +2060,16 @@ export type Database = {
           asset_tag?: string | null
           assigned_to?: string | null
           category_id?: string | null
+          check_out_notes?: string | null
+          checked_out_at?: string | null
+          checked_out_to?: string | null
           created_at?: string | null
           created_by?: string | null
           custom_fields?: Json | null
           department_id?: string | null
+          depreciation_method?: string | null
           description?: string | null
+          expected_return_date?: string | null
           id?: string
           is_active?: boolean | null
           location_id?: string | null
@@ -1888,11 +2080,14 @@ export type Database = {
           organisation_id?: string | null
           purchase_date?: string | null
           purchase_price?: number | null
+          qr_code?: string | null
+          salvage_value?: number | null
           serial_number?: string | null
           status?: string | null
           tenant_id?: number | null
           updated_at?: string | null
           updated_by?: string | null
+          useful_life_years?: number | null
           vendor_id?: string | null
           warranty_expiry?: string | null
         }
@@ -1901,11 +2096,16 @@ export type Database = {
           asset_tag?: string | null
           assigned_to?: string | null
           category_id?: string | null
+          check_out_notes?: string | null
+          checked_out_at?: string | null
+          checked_out_to?: string | null
           created_at?: string | null
           created_by?: string | null
           custom_fields?: Json | null
           department_id?: string | null
+          depreciation_method?: string | null
           description?: string | null
+          expected_return_date?: string | null
           id?: string
           is_active?: boolean | null
           location_id?: string | null
@@ -1916,11 +2116,14 @@ export type Database = {
           organisation_id?: string | null
           purchase_date?: string | null
           purchase_price?: number | null
+          qr_code?: string | null
+          salvage_value?: number | null
           serial_number?: string | null
           status?: string | null
           tenant_id?: number | null
           updated_at?: string | null
           updated_by?: string | null
+          useful_life_years?: number | null
           vendor_id?: string | null
           warranty_expiry?: string | null
         }
@@ -1930,6 +2133,13 @@ export type Database = {
             columns: ["category_id"]
             isOneToOne: false
             referencedRelation: "itam_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "itam_assets_checked_out_to_fkey"
+            columns: ["checked_out_to"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
           {
@@ -2349,6 +2559,82 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      itam_maintenance_schedules: {
+        Row: {
+          asset_id: string
+          assigned_to: string | null
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          frequency: string | null
+          id: string
+          is_active: boolean | null
+          last_completed_date: string | null
+          next_due_date: string | null
+          notify_before_days: number | null
+          organisation_id: string | null
+          schedule_type: string | null
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          asset_id: string
+          assigned_to?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          frequency?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_completed_date?: string | null
+          next_due_date?: string | null
+          notify_before_days?: number | null
+          organisation_id?: string | null
+          schedule_type?: string | null
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          asset_id?: string
+          assigned_to?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          frequency?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_completed_date?: string | null
+          next_due_date?: string | null
+          notify_before_days?: number | null
+          organisation_id?: string | null
+          schedule_type?: string | null
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "itam_maintenance_schedules_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "itam_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "itam_maintenance_schedules_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "itam_maintenance_schedules_organisation_id_fkey"
+            columns: ["organisation_id"]
+            isOneToOne: false
+            referencedRelation: "organisations"
             referencedColumns: ["id"]
           },
         ]
