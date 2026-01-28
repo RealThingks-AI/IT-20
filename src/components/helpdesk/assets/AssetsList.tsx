@@ -331,7 +331,7 @@ export function AssetsList({ filters = {}, onSelectionChange }: AssetsListProps)
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <div className="border rounded-lg overflow-x-auto">
         <Table>
           <TableHeader>
@@ -393,15 +393,15 @@ export function AssetsList({ filters = {}, onSelectionChange }: AssetsListProps)
         </Table>
       </div>
 
-      {/* Pagination */}
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-muted-foreground">
-          Showing {assets.length === 0 ? 0 : ((page - 1) * pageSize) + 1}–{Math.min(page * pageSize, totalCount)} of {totalCount} assets
-        </div>
+      {/* Compact Pagination */}
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-muted-foreground">
+          {assets.length === 0 ? 0 : ((page - 1) * pageSize) + 1}–{Math.min(page * pageSize, totalCount)} of {totalCount}
+        </span>
         
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Per page:</span>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
+            <span className="text-muted-foreground">Per page:</span>
             <Select 
               value={pageSize.toString()} 
               onValueChange={(value) => {
@@ -409,7 +409,7 @@ export function AssetsList({ filters = {}, onSelectionChange }: AssetsListProps)
                 setPage(1);
               }}
             >
-              <SelectTrigger className="w-[70px] h-8">
+              <SelectTrigger className="w-[60px] h-7 text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -422,47 +422,47 @@ export function AssetsList({ filters = {}, onSelectionChange }: AssetsListProps)
             </Select>
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5">
             <Button
               variant="outline"
               size="icon"
-              className="h-8 w-8"
+              className="h-7 w-7"
               onClick={() => setPage(1)}
               disabled={page === 1}
             >
-              <ChevronsLeft className="h-4 w-4" />
+              <ChevronsLeft className="h-3.5 w-3.5" />
             </Button>
             <Button
               variant="outline"
               size="icon"
-              className="h-8 w-8"
+              className="h-7 w-7"
               onClick={() => setPage(page - 1)}
               disabled={page === 1}
             >
-              <ChevronLeft className="h-4 w-4" />
+              <ChevronLeft className="h-3.5 w-3.5" />
             </Button>
             
-            <span className="text-sm mx-2">
-              Page {page} of {totalPages || 1}
+            <span className="mx-1.5 text-muted-foreground">
+              {page}/{totalPages || 1}
             </span>
 
             <Button
               variant="outline"
               size="icon"
-              className="h-8 w-8"
+              className="h-7 w-7"
               onClick={() => setPage(page + 1)}
               disabled={page >= totalPages}
             >
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="h-3.5 w-3.5" />
             </Button>
             <Button
               variant="outline"
               size="icon"
-              className="h-8 w-8"
+              className="h-7 w-7"
               onClick={() => setPage(totalPages)}
               disabled={page >= totalPages}
             >
-              <ChevronsRight className="h-4 w-4" />
+              <ChevronsRight className="h-3.5 w-3.5" />
             </Button>
           </div>
         </div>
