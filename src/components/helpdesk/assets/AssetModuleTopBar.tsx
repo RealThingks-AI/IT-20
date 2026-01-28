@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Plus, Settings, FileSpreadsheet } from "lucide-react";
 import { AssetColumnSettings } from "./AssetColumnSettings";
@@ -13,9 +13,10 @@ import {
 
 interface AssetModuleTopBarProps {
   onColumnsChange?: () => void;
+  children?: React.ReactNode;
 }
 
-export function AssetModuleTopBar({ onColumnsChange }: AssetModuleTopBarProps) {
+export function AssetModuleTopBar({ onColumnsChange, children }: AssetModuleTopBarProps) {
   const navigate = useNavigate();
   const [columnSettingsOpen, setColumnSettingsOpen] = useState(false);
 
@@ -26,54 +27,60 @@ export function AssetModuleTopBar({ onColumnsChange }: AssetModuleTopBarProps) {
   return (
     <>
       <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm border-b">
-        <div className="flex items-center gap-1 px-3 py-1.5">
-          <TooltipProvider delayDuration={300}>
-            {/* Add Asset Button */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => navigate("/assets/add")}
-                  className="gap-1 h-7 px-2"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  <span className="text-xs">Add</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">Add new asset</TooltipContent>
-            </Tooltip>
+        <div className="flex items-center gap-2 px-3 py-1.5">
+          {/* Left side - filters passed as children */}
+          {children}
 
-            {/* Setup Columns Button */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setColumnSettingsOpen(true)}
-                  className="h-7 w-7"
-                >
-                  <Settings className="h-3.5 w-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">Setup columns</TooltipContent>
-            </Tooltip>
+          {/* Right side - action buttons */}
+          <div className="flex items-center gap-1 ml-auto">
+            <TooltipProvider delayDuration={300}>
+              {/* Add Asset Button */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => navigate("/assets/add")}
+                    className="gap-1 h-7 px-2"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span className="text-xs">Add</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Add new asset</TooltipContent>
+              </Tooltip>
 
-            {/* Export to Excel Button */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleExportToExcel}
-                  className="h-7 w-7"
-                >
-                  <FileSpreadsheet className="h-3.5 w-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">Export to Excel</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+              {/* Setup Columns Button */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setColumnSettingsOpen(true)}
+                    className="h-7 w-7"
+                  >
+                    <Settings className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Setup columns</TooltipContent>
+              </Tooltip>
+
+              {/* Export to Excel Button */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleExportToExcel}
+                    className="h-7 w-7"
+                  >
+                    <FileSpreadsheet className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Export to Excel</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
         </div>
       </div>
 
