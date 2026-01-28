@@ -51,7 +51,6 @@ export default function AllAssets() {
   };
 
   const handleTypeChange = (value: string) => {
-    // Store category ID instead of name for proper DB filtering
     const selectedCategory = value === "all" ? null : categories.find(c => c.name === value);
     setFilters(prev => ({ 
       ...prev, 
@@ -70,28 +69,26 @@ export default function AllAssets() {
   return (
     <div className="min-h-screen bg-background">
       <AssetModuleTopBar
-        onSearch={handleSearchChange}
-        searchValue={filters.search}
         onColumnsChange={() => setColumnsVersion(v => v + 1)}
       />
 
-      <div className="px-4 py-3 space-y-3">
-        {/* Filters Row */}
+      <div className="px-3 py-2 space-y-2">
+        {/* Unified Filter Row */}
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Inline Search */}
-          <div className="relative w-full sm:w-[280px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          {/* Search Input */}
+          <div className="relative w-full sm:w-[220px]">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
             <Input
               placeholder="Search assets..."
               value={filters.search || ""}
               onChange={e => handleSearchChange(e.target.value)}
-              className="pl-9 h-9"
+              className="pl-8 h-8 text-sm"
             />
             {filters.search && (
               <Button
                 variant="ghost"
                 size="icon"
-                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                className="absolute right-0.5 top-1/2 -translate-y-1/2 h-6 w-6"
                 onClick={() => handleSearchChange("")}
               >
                 <X className="h-3 w-3" />
@@ -99,114 +96,114 @@ export default function AllAssets() {
             )}
           </div>
 
-          <div className="flex items-center gap-2 ml-auto flex-wrap">
+          {/* Status Filter */}
+          <Select
+            value={filters.status || "all"}
+            onValueChange={handleStatusChange}
+          >
+            <SelectTrigger className="w-[100px] h-8 text-xs">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="available">Available</SelectItem>
+              <SelectItem value="assigned">Assigned</SelectItem>
+              <SelectItem value="in_repair">In Repair</SelectItem>
+              <SelectItem value="lost">Lost</SelectItem>
+              <SelectItem value="disposed">Disposed</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Type Filter */}
+          <Select
+            value={filters.typeName || "all"}
+            onValueChange={handleTypeChange}
+          >
+            <SelectTrigger className="w-[100px] h-8 text-xs">
+              <SelectValue placeholder="Type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              {categories.map((category) => (
+                <SelectItem key={category.id} value={category.name}>
+                  {category.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <div className="flex items-center gap-1.5 ml-auto">
             {/* Bulk Actions */}
             {selectedAssetIds.length > 0 && bulkActions && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button size="sm" variant="outline" className="h-9">
-                    Bulk Actions ({selectedAssetIds.length})
-                    <ChevronDown className="ml-1.5 h-3.5 w-3.5" />
+                  <Button size="sm" variant="outline" className="h-8 text-xs">
+                    Bulk ({selectedAssetIds.length})
+                    <ChevronDown className="ml-1 h-3 w-3" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
+                <DropdownMenuContent align="end">
                   <DropdownMenuItem onClick={bulkActions.handleCheckOut}>
-                    <UserCheck className="mr-2 h-4 w-4" />
+                    <UserCheck className="mr-2 h-3.5 w-3.5" />
                     Check Out
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={bulkActions.handleCheckIn}>
-                    <UserCheck className="mr-2 h-4 w-4" />
+                    <UserCheck className="mr-2 h-3.5 w-3.5" />
                     Check In
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={bulkActions.handleMaintenance}>
-                    <Wrench className="mr-2 h-4 w-4" />
+                    <Wrench className="mr-2 h-3.5 w-3.5" />
                     Maintenance
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={bulkActions.handleDispose}>
-                    <Settings className="mr-2 h-4 w-4" />
+                    <Settings className="mr-2 h-3.5 w-3.5" />
                     Dispose
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={bulkActions.handleDelete} className="text-destructive">
-                    <Package className="mr-2 h-4 w-4" />
+                    <Package className="mr-2 h-3.5 w-3.5" />
                     Delete
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
 
-            {/* Status Filter */}
-            <Select
-              value={filters.status || "all"}
-              onValueChange={handleStatusChange}
-            >
-              <SelectTrigger className="w-[130px] h-9">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="available">Available</SelectItem>
-                <SelectItem value="assigned">Assigned</SelectItem>
-                <SelectItem value="in_repair">In Repair</SelectItem>
-                <SelectItem value="lost">Lost</SelectItem>
-                <SelectItem value="disposed">Disposed</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {/* Type Filter - Now uses category ID for filtering */}
-            <Select
-              value={filters.typeName || "all"}
-              onValueChange={handleTypeChange}
-            >
-              <SelectTrigger className="w-[130px] h-9">
-                <SelectValue placeholder="Type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
-                {categories.map((category) => (
-                  <SelectItem key={category.id} value={category.name}>
-                    {category.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
             {/* Clear Filters */}
             {hasActiveFilters && (
-              <Button variant="ghost" size="sm" onClick={clearFilters} className="h-9 gap-1">
-                <X className="h-3.5 w-3.5" />
+              <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 gap-1 text-xs px-2">
+                <X className="h-3 w-3" />
                 Clear
               </Button>
             )}
           </div>
         </div>
 
-        {/* Active Filters Display */}
+        {/* Active Filters Display - Compact */}
         {hasActiveFilters && (
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs text-muted-foreground">Filters:</span>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Filters:</span>
             {filters.search && (
-              <Badge variant="secondary" className="gap-1 text-xs">
-                Search: {filters.search}
+              <Badge variant="secondary" className="gap-1 text-[10px] h-5 px-1.5">
+                {filters.search}
                 <X
-                  className="h-3 w-3 cursor-pointer"
+                  className="h-2.5 w-2.5 cursor-pointer"
                   onClick={() => handleSearchChange("")}
                 />
               </Badge>
             )}
             {filters.status && (
-              <Badge variant="secondary" className="gap-1 text-xs capitalize">
-                Status: {filters.status.replace("_", " ")}
+              <Badge variant="secondary" className="gap-1 text-[10px] h-5 px-1.5 capitalize">
+                {filters.status.replace("_", " ")}
                 <X
-                  className="h-3 w-3 cursor-pointer"
+                  className="h-2.5 w-2.5 cursor-pointer"
                   onClick={() => handleStatusChange("all")}
                 />
               </Badge>
             )}
             {filters.typeName && (
-              <Badge variant="secondary" className="gap-1 text-xs">
-                Type: {filters.typeName}
+              <Badge variant="secondary" className="gap-1 text-[10px] h-5 px-1.5">
+                {filters.typeName}
                 <X
-                  className="h-3 w-3 cursor-pointer"
+                  className="h-2.5 w-2.5 cursor-pointer"
                   onClick={() => handleTypeChange("all")}
                 />
               </Badge>
