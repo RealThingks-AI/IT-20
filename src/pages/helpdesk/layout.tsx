@@ -115,7 +115,7 @@ const HelpdeskLayout = () => {
       <main className="flex-1 h-screen flex flex-col bg-background overflow-hidden will-change-auto">
         <header className="border-b px-4 flex items-center justify-between shrink-0 h-11">
           <div id="helpdesk-header-left" className="flex items-center">
-            {!location.pathname.startsWith("/tickets") && !location.pathname.startsWith("/problems") && !location.pathname.startsWith("/settings") && (
+{!location.pathname.startsWith("/tickets") && !location.pathname.startsWith("/problems") && !location.pathname.startsWith("/settings") && !location.pathname.startsWith("/assets") && (
               <h1 className="text-sm font-medium">{pageTitle}</h1>
             )}
             <div id="settings-header-portal" />
