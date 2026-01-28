@@ -112,7 +112,7 @@ const HelpdeskLayout = () => {
     <div className="h-screen flex w-full overflow-hidden">
       <HelpdeskSidebar />
 
-      <main className="flex-1 h-screen flex flex-col bg-background overflow-hidden">
+      <main className="flex-1 h-screen flex flex-col bg-background overflow-hidden will-change-auto">
         <header className="border-b px-4 flex items-center justify-between shrink-0 h-11">
           <div id="helpdesk-header-left" className="flex items-center">
             {!location.pathname.startsWith("/tickets") && !location.pathname.startsWith("/problems") && !location.pathname.startsWith("/settings") && (
