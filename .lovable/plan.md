@@ -1,454 +1,270 @@
 
-# Ticket Management Module - Enterprise-Grade ITSM Fix Plan
+# Comprehensive Ticket Module Optimization Plan
 
-## Executive Summary
+## Overview
 
-This plan addresses all issues identified in the comprehensive audit to make the Ticket module enterprise-grade, ITIL-aligned, and production-ready. The changes are organized into 7 phases with clear priorities.
-
----
-
-## Phase 1: Global Status & Color Dictionary (CRITICAL)
-
-### 1.1 Standardize Status Colors
-
-**Current State in `src/lib/ticketUtils.ts`:**
-- open: blue (correct)
-- in_progress: purple (correct)  
-- on_hold: orange (WRONG - should be yellow)
-- resolved: green (correct)
-- closed: grey (correct)
-- pending: yellow (correct)
-- known_error: red (correct)
-
-**Files to Update:**
-- `src/lib/ticketUtils.ts` - Central color definitions
-- `src/components/helpdesk/DashboardCharts.tsx` - STATUS_COLORS object
-- `src/pages/helpdesk/tickets/dashboard.tsx` - Icon colors
-- `src/pages/helpdesk/dashboard.tsx` - Icon colors
-- `src/components/helpdesk/RecentTicketsList.tsx` - Local color functions
-
-**Changes Required:**
-```
-on_hold: Change from orange to yellow
-Ensure all dashboard icon colors match:
-- Open → text-blue-500
-- In Progress → text-purple-500
-- On Hold → text-yellow-500
-- Resolved → text-green-500
-- Closed → text-gray-500
-- Urgent/SLA Breached → text-red-500
-```
-
-### 1.2 Remove All "Unknown" Values
-
-**Locations showing "Unknown":**
-1. `src/components/helpdesk/TicketTableView.tsx:167-169` - Shows "Unknown" for created_by
-2. `src/components/helpdesk/ProblemTableView.tsx:143-145` - Shows "Unknown" for created_by
-3. `src/pages/helpdesk/problems/[id].tsx:260` - Shows "Unknown"
-
-**Fix:** Replace "Unknown" with "System" or fetch the actual user data before rendering.
-
-### 1.3 Standardize Date Format
-
-**Current inconsistencies:**
-- `TicketTableView.tsx`: `format(date, 'MMM dd, yyyy')`
-- `ProblemTableView.tsx`: `format(date, 'MMM dd, yyyy')`
-- `RecentTicketsList.tsx`: Uses `FormattedDate` with "short"
-- Ticket detail pages: Various formats
-
-**Fix:** Create a unified date format constant and use `FormattedDate` component everywhere.
-
-### 1.4 Enforce Unique ID Formats
-
-**Current State:**
-- Tickets: TKT-XXXXXX (for all types)
-- Problems: PRB-XXXXXX (correct)
-
-**Required:**
-- Incidents: INC-XXXXXX
-- Service Requests: SR-XXXXXX
-- Problems: PRB-XXXXXX (keep)
-
-**Files to Update:**
-- `supabase/functions` - Update `generate_helpdesk_ticket_number` and `generate_unified_request_number`
-- Database function `generate_unified_request_number` needs modification
+This plan addresses all identified issues across the four main areas of the Ticket module: Dashboard, All Tickets List, Problems, and Settings. The goal is to create a clean, compact, and professional UI following industry standards (Freshdesk, Zendesk, ServiceNow patterns).
 
 ---
 
-## Phase 2: Dashboard - Action Summary Section (HIGH PRIORITY)
+## Issue 1: Dashboard Improvements
 
-### 2.1 Add Missing Dashboard Cards
+### Current Problems
+- Only stat cards displayed - looks sparse and lacks context
+- Double header lines (layout header + page header)
+- Inconsistent button positioning
+- No charts, trends, or actionable insights like modern ticketing dashboards
 
-**Current Cards in `src/pages/helpdesk/tickets/dashboard.tsx`:**
-- Total Tickets
-- Open
-- In Progress
-- Resolved
-- Urgent
-- Last 7 Days
+### Solution
 
-**Missing Cards (add to top row):**
-- **Unassigned Tickets** - Filter: `assignee_id IS NULL AND status NOT IN ('resolved', 'closed')`
-- **SLA Breached Tickets** - Filter: `sla_breached = true`
+**A. Remove Duplicate Header**
+- The layout already shows "Tickets Dashboard" in the header bar
+- Remove the redundant `<h1>Tickets Dashboard</h1>` from the page itself
 
-### 2.2 Update useUnifiedRequestsStats Hook
+**B. Redesign Dashboard Layout (Industry Standard Pattern)**
+Add more meaningful content beyond just stat cards:
 
-**File:** `src/hooks/useUnifiedRequests.tsx`
-
-**Add new stats:**
-```typescript
-// Add to the stats calculation
-const unassignedTickets = tickets.filter(t => 
-  !t.assignee_id && !['resolved', 'closed'].includes(t.status)
-).length;
-
-const slaBreachedCount = tickets.filter(t => t.sla_breached).length;
+```text
++------------------------------------------------------------------+
+| [Actions: Reports, Archive, + New Ticket, + New Problem] (right) |
++------------------------------------------------------------------+
+| TICKETS OVERVIEW                                                  |
+| [6 Total] [4 Open] [1 Progress] [1 Hold] [0 Resolved] [1 Urgent] |
++------------------------------------------------------------------+
+| Recent Activity          |  Ticket Trends (7-day mini chart)     |
+| - Ticket #123 updated    |  [Simple line/bar chart showing       |
+| - Ticket #124 created    |   tickets opened vs resolved]         |
++------------------------------------------------------------------+
+| SERVICE REQUESTS         |  PROBLEMS                             |
+| [2 Total] [2 Pending]    |  [5 Total] [1 Open] [3 Progress]      |
++------------------------------------------------------------------+
 ```
 
-### 2.3 Add Tooltips to All Cards
+**C. Specific Code Changes**
 
-Each stat card should explain what it represents when hovered.
+**File: `src/pages/helpdesk/tickets/dashboard.tsx`**
+- Remove the top bar header section (lines 232-265) since layout already shows title
+- Keep just the action buttons in a simpler format
+- Add a "Recent Tickets" quick list section
+- Add a mini trend chart (tickets opened vs resolved this week)
+- Compact the stat cards to smaller size
 
-### 2.4 Ensure All Cards Are Clickable
-
-**Current:** Most cards navigate correctly
-**Fix:** Add navigation to all cards, including:
-- Unassigned → `/tickets/list?assignee=unassigned`
-- SLA Breached → `/tickets/list?sla=breached`
+**D. Visual Improvements**
+- Use 6-column grid for ticket stats (instead of 8)
+- Add subtle section dividers
+- Add "View All" links on each section header
 
 ---
 
-## Phase 3: All Tickets List - UX & Data Fixes
+## Issue 2: All Tickets List Optimization
 
-### 3.1 Add Missing Table Columns
+### Current Problems (from screenshot)
+1. **Duplicate search**: Search icon toggle in top bar + inline search input
+2. **Too many dropdowns**: Type, Status, Priority as separate dropdowns + Views + Columns
+3. **View toggle** (table/card) - unnecessary complexity
+4. **Wrapped table rows**: Content overflows making rows multi-line
+5. **Pill badges**: Status and Priority using colorful badges - too busy
+6. **Actions column**: Eye, Edit, More - 3 icons per row is too many
 
-**File:** `src/components/helpdesk/TicketTableView.tsx`
+### Solution
 
-**Add columns:**
-- **SLA Due Time** - Show formatted due date
-- **SLA Status** - Badge showing "On Track" / "Warning" / "Breached"
+**A. Single Unified Top Bar**
 
-**Update:** `src/lib/ticketUtils.ts` - Add to defaultTicketColumns:
-```typescript
-{ id: 'sla_due_date', label: 'SLA Due', visible: true },
-{ id: 'sla_status', label: 'SLA Status', visible: true },
+```text
++------------------------------------------------------------------+
+| [Tickets | Requests] toggle  |  [🔍 Search...]  [Status ▾] [Pri ▾] | [Actions ▾] |
++------------------------------------------------------------------+
 ```
 
-### 3.2 Implement Row Highlighting
+- Replace Type dropdown with a **toggle switch** (Tickets | Service Requests)
+- Keep only ONE search input (remove the expandable search from TicketModuleTopBar)
+- Remove ViewToggle (table only - card view rarely used)
+- Move Columns, Views, Export into a single "Actions" dropdown on the right
+- Remove Merge button from main bar (put in Actions dropdown)
 
-**File:** `src/components/helpdesk/TicketTableView.tsx`
+**B. Compact Table Rows**
+- Single-line rows with text truncation
+- Replace colorful priority badges with subtle text color only
+- Replace status badges with simpler text + dot indicator
+- Reduce Actions column to just More (...) dropdown
 
-**Add highlighting rules:**
-- Priority Urgent/High → light red/orange background
-- Assignee missing → light yellow background
-- SLA breached → red left border
+**C. Specific Code Changes**
 
-**Current:** Only SLA breached has highlighting (line 124)
+**File: `src/components/helpdesk/tickets/TicketModuleTopBar.tsx`**
+- Remove the expandable search toggle and inline search (lines 137-191)
+- Keep only the action buttons on the right (Reports, Archive, Export icons)
 
-**Enhance to:**
-```typescript
-className={cn(
-  "cursor-pointer hover:bg-muted/50 h-11",
-  isSLABreached(ticket) && 'bg-red-50 dark:bg-red-950/20',
-  !ticket.assignee_id && ['open', 'in_progress'].includes(ticket.status) && 'bg-yellow-50 dark:bg-yellow-950/20',
-  ticket.priority === 'urgent' && 'border-l-4 border-red-500',
-  ticket.priority === 'high' && 'border-l-4 border-orange-500'
-)}
-```
+**File: `src/pages/helpdesk/tickets/list.tsx`**
+- Replace Type dropdown with ToggleGroup (Tickets | Requests)
+- Remove ViewToggle component
+- Remove ColumnVisibilityToggle from inline (move to Actions dropdown)
+- Remove SavedViewsManager from inline (move to Actions dropdown)
+- Create new "Actions" dropdown containing: Columns, Views, Export, Merge
 
-### 3.3 Create Separate View Tabs
-
-**File:** `src/pages/helpdesk/tickets/list.tsx`
-
-**Add view filter tabs:**
-- All Requests
-- Incidents Only (request_type = 'ticket')
-- Service Requests Only (request_type = 'service_request')
-- My Tickets (assignee = current user)
-- SLA Breached
-
-### 3.4 Add Bulk Actions
-
-**Current bulk actions in `BulkActionsButton.tsx`:**
-- Change Status
-- Change Priority
-- Delete
-
-**Missing:**
-- Assign (bulk assign to user)
-- Close (bulk close)
-
-### 3.5 Freeze Critical Columns
-
-**File:** `src/components/helpdesk/TicketTableView.tsx`
-
-Make Checkbox, Ticket ID, and Status columns sticky using CSS:
-```css
-position: sticky;
-left: 0;
-z-index: 1;
-background: inherit;
-```
+**File: `src/components/helpdesk/TicketTableView.tsx`**
+- Ensure single-line rows with proper truncation
+- Simplify status display: use text with colored left border or dot
+- Simplify priority display: just colored text, no badge
+- Reduce Actions to single MoreHorizontal dropdown
 
 ---
 
-## Phase 4: Problems Module - ITIL Compliance
+## Issue 3: Problems Page Updates
 
-### 4.1 Update Problem Status Lifecycle
+### Current Problems
+- "New Ticket" button instead of "New Problem" (wrong button)
+- Similar UI clutter as Tickets list
+- Duplicate search icon
 
-**Current in `src/components/helpdesk/ProblemTableView.tsx:29-35`:**
-```typescript
-const statusOptions = [
-  { value: 'open', label: 'Open' },
-  { value: 'in_progress', label: 'In Progress' },
-  { value: 'resolved', label: 'Resolved' },
-  { value: 'closed', label: 'Closed' },
-  { value: 'known_error', label: 'Known Error' },
-];
+### Solution
+
+Apply same optimizations as Tickets List:
+
+**File: `src/pages/helpdesk/tickets/problems.tsx`**
+- Remove search icon toggle from TicketModuleTopBar
+- Move "New Problem" button to the right of filters
+- Fix button label (currently showing "New Ticket" - should be "New Problem")
+- Remove redundant filter controls
+- Create Actions dropdown for bulk operations
+
+**File: `src/components/helpdesk/ProblemTableView.tsx`**
+- Apply same single-line row optimization
+- Simplify badges to text-only where possible
+- Keep RCA Status badge (useful) but make more compact
+
+---
+
+## Issue 4: Settings Page (Rename to "Advanced")
+
+### Current Problems
+- Called "Settings" but should be "Advanced"
+- Has duplicate header (layout shows "Ticket Settings" + page shows title)
+- 8 cards need functionality verification
+
+### Solution
+
+**File: `src/pages/helpdesk/tickets/settings.tsx`**
+- Rename to use title "Advanced Settings" or just "Advanced"
+- Remove the duplicate top bar with title (layout already shows it)
+- Just render `<TicketConfiguration />` directly with minimal wrapper
+
+**File: `src/pages/helpdesk/layout.tsx`**
+- Update route title from "Ticket Settings" to "Advanced"
+
+**File: `src/components/helpdesk/TicketConfiguration.tsx`**
+- Remove the inline h2 header (it duplicates layout header)
+- Verify all 8 cards have proper click handlers and navigation
+- Current cards and their destinations:
+  1. Categories → inline manager (working)
+  2. SLA Policies → /sla
+  3. Assignment Rules → /tickets/assignment-rules
+  4. Automation Rules → /automation
+  5. Queues → /queues
+  6. Ticket Templates → inline manager (working)
+  7. Canned Responses → inline manager (working)
+  8. Column Settings → inline manager (working)
+
+**File: `src/components/helpdesk/HelpdeskSidebar.tsx`**
+- Rename "Settings" menu item to "Advanced"
+
+---
+
+## File Changes Summary
+
+### Files to Modify
+
+| File | Changes |
+|------|---------|
+| `src/pages/helpdesk/tickets/dashboard.tsx` | Remove duplicate header, add Recent Activity section, add mini chart, compact stats |
+| `src/pages/helpdesk/tickets/list.tsx` | Remove ViewToggle, convert Type dropdown to toggle, create Actions dropdown, cleanup filters |
+| `src/pages/helpdesk/tickets/problems.tsx` | Fix "New Ticket" → "New Problem", remove search toggle, apply same cleanup as list |
+| `src/pages/helpdesk/tickets/settings.tsx` | Remove header, rename page, minimal wrapper |
+| `src/pages/helpdesk/layout.tsx` | Update "Ticket Settings" to "Advanced" in routeTitles |
+| `src/components/helpdesk/tickets/TicketModuleTopBar.tsx` | Remove expandable search section, keep only right-side icons |
+| `src/components/helpdesk/TicketTableView.tsx` | Single-line rows, simplify badges to text, consolidate actions |
+| `src/components/helpdesk/ProblemTableView.tsx` | Single-line rows, simplify badges |
+| `src/components/helpdesk/TicketConfiguration.tsx` | Remove duplicate header and description |
+| `src/components/helpdesk/HelpdeskSidebar.tsx` | Rename "Settings" to "Advanced" |
+
+### New Components (if needed)
+- May create `ActionsDropdown.tsx` for consolidated actions menu
+
+---
+
+## Technical Implementation Details
+
+### 1. Toggle for Ticket/Request Type
+
+Replace Select dropdown with ToggleGroup:
+```tsx
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+
+<ToggleGroup type="single" value={filters.requestType || 'all'} onValueChange={...}>
+  <ToggleGroupItem value="ticket" className="h-7 px-3 text-xs">Tickets</ToggleGroupItem>
+  <ToggleGroupItem value="service_request" className="h-7 px-3 text-xs">Requests</ToggleGroupItem>
+</ToggleGroup>
 ```
 
-**Required ITIL workflow:**
-```typescript
-const statusOptions = [
-  { value: 'open', label: 'Open' },
-  { value: 'investigating', label: 'Investigating' },  // NEW - replaces in_progress
-  { value: 'known_error', label: 'Known Error' },
-  { value: 'resolved', label: 'Resolved' },
-  { value: 'closed', label: 'Closed' },
-];
+### 2. Actions Dropdown Pattern
+
+```tsx
+<DropdownMenu>
+  <DropdownMenuTrigger asChild>
+    <Button variant="outline" size="sm" className="h-7 gap-1">
+      <Settings className="h-3.5 w-3.5" />
+      Actions
+    </Button>
+  </DropdownMenuTrigger>
+  <DropdownMenuContent align="end">
+    <DropdownMenuItem>Columns Settings</DropdownMenuItem>
+    <DropdownMenuItem>Saved Views</DropdownMenuItem>
+    <DropdownMenuSeparator />
+    <DropdownMenuItem>Export to CSV</DropdownMenuItem>
+    {selectedIds.length >= 2 && (
+      <DropdownMenuItem>Merge Selected</DropdownMenuItem>
+    )}
+  </DropdownMenuContent>
+</DropdownMenu>
 ```
 
-**Files to update:**
-- `src/components/helpdesk/ProblemTableView.tsx`
-- `src/pages/helpdesk/tickets/problems.tsx`
-- `src/lib/ticketUtils.ts` - Add 'investigating' status color
-- Database: May need migration if status values are constrained
+### 3. Simplified Table Row Style
 
-### 4.2 Add Validation for Problem Resolution
+```tsx
+// Status - simple text with dot
+<span className="flex items-center gap-1.5">
+  <span className={cn("w-1.5 h-1.5 rounded-full", statusDotColor)} />
+  <span className="text-xs">{formatStatus(status)}</span>
+</span>
 
-**File:** `src/components/helpdesk/EditProblemDialog.tsx`
-
-A Problem cannot be resolved without:
-- Root Cause (required field)
-- Fix/Workaround (at least one required)
-
-Add validation:
-```typescript
-if (status === 'resolved' && !rootCause) {
-  toast.error("Root cause is required to resolve a problem");
-  return;
-}
-```
-
-### 4.3 Add Linked Tickets Count Column
-
-**File:** `src/pages/helpdesk/tickets/problems.tsx`
-
-**Current query:**
-```typescript
-.select(`*, category:helpdesk_categories(name)`)
-```
-
-**Update to include count:**
-```typescript
-.select(`
-  *, 
-  category:helpdesk_categories(name),
-  linked_tickets:helpdesk_problem_tickets(count)
-`)
-```
-
-### 4.4 Add RCA Status Column
-
-**File:** `src/components/helpdesk/ProblemTableView.tsx`
-
-Add column showing:
-- "Pending" if root_cause is null
-- "Documented" if root_cause exists
-
-### 4.5 Visual Distinction for Known Errors
-
-**File:** `src/lib/ticketUtils.ts`
-
-Update `known_error` styling to be more distinct:
-```typescript
-case 'known_error': return 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-700 font-semibold';
+// Priority - colored text only
+<span className={cn("text-xs font-medium", priorityTextColor)}>
+  {priority}
+</span>
 ```
 
 ---
 
-## Phase 5: Ticket Settings - Structure & Safety
+## Additional Improvements
 
-### 5.1 Reorder Settings Cards
+### Industry Best Practices Applied
+1. **Single source of truth for search** - one search input only
+2. **Progressive disclosure** - hide advanced options in dropdowns
+3. **Consistent sizing** - all controls `h-7`, icons `h-3.5`
+4. **Compact data density** - single-line rows, text over badges
+5. **Clear visual hierarchy** - primary actions prominent, secondary in dropdowns
 
-**File:** `src/components/helpdesk/TicketConfiguration.tsx`
-
-**Current order:**
-1. SLA Policies
-2. Queues
-3. Assignment Rules
-4. Categories
-5. Canned Responses
-6. Ticket Templates
-7. Automation Rules
-8. Column Settings
-
-**Recommended order (by impact):**
-1. Categories (with SLA + default priority mapping)
-2. SLA Policies (response, resolution, escalation)
-3. Assignment Rules (with preview/test mode)
-4. Automation Rules (with execution logs)
-5. Queues
-6. Ticket Templates
-7. Canned Responses
-8. Column Settings
-
-### 5.2 Add Change Warning for Live-Impacting Settings
-
-**File:** `src/pages/helpdesk/sla.tsx`
-
-Before modifying SLA policies that affect existing tickets:
-```typescript
-// Show warning dialog
-<AlertDialog>
-  <AlertDialogContent>
-    <AlertDialogTitle>Warning: This will affect X active tickets</AlertDialogTitle>
-    <AlertDialogDescription>
-      Changing this SLA policy will recalculate due dates for all open tickets with this priority.
-    </AlertDialogDescription>
-  </AlertDialogContent>
-</AlertDialog>
-```
-
-### 5.3 Add Audit Logging for Setting Changes
-
-Create audit log entries when:
-- SLA policies are created/updated/deleted
-- Assignment rules are modified
-- Automation rules are toggled
+### Accessibility Maintained
+- All buttons have aria-labels
+- Keyboard navigation preserved
+- Screen reader friendly structure
 
 ---
 
-## Phase 6: SLA Engine Enhancements
+## Execution Order
 
-### 6.1 Add First Response Time Tracking
-
-**Files:**
-- `src/hooks/useUnifiedRequestsStats.tsx` - Add first_response tracking
-- `src/hooks/useHelpdeskStats.tsx` - Already has avgFirstResponse
-
-**Dashboard display:** Already partially implemented in `DashboardCharts.tsx`
-
-### 6.2 Add SLA Breach Indicator to List View
-
-**File:** `src/components/helpdesk/TicketTableView.tsx`
-
-**Current:** Shows triangle icon for breached tickets
-**Enhancement:** Add red badge "BREACHED" that's visible without hover
-
-### 6.3 SLA Status in Dashboard Cards
-
-**File:** `src/pages/helpdesk/tickets/dashboard.tsx`
-
-Add dedicated SLA card showing:
-- Breached count
-- At-risk count (within 2 hours)
-- On-track count
-
----
-
-## Phase 7: Visual & UX Polish
-
-### 7.1 Consistent Card Padding
-
-**Standardize all cards to use:**
-```css
-CardContent: padding: 1rem (p-4)
-CardHeader: padding-bottom: 0.5rem (pb-2)
-```
-
-### 7.2 Table Row Heights
-
-**Standardize to:**
-```css
-TableRow: height: 2.75rem (h-11)
-Font-size: 0.875rem (text-sm)
-```
-
-### 7.3 Muted Icons, Bold Numbers
-
-**Pattern:** Icon should use `text-muted-foreground`, numbers should use `text-2xl font-bold`
-
-### 7.4 Responsive Breakpoints
-
-**File:** `src/pages/helpdesk/tickets/dashboard.tsx`
-
-Add intermediate breakpoints for tablet view:
-```typescript
-className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4"
-```
-
-### 7.5 Action Button Spacing
-
-Ensure minimum 0.5rem gap between action buttons to prevent misclicks:
-```typescript
-<div className="flex justify-end gap-2">
-```
-
----
-
-## Implementation Summary
-
-### Files to Create
-1. `src/lib/statusConfig.ts` - Central status/priority configuration
-
-### Files to Modify (Major Changes)
-1. `src/lib/ticketUtils.ts` - Status colors, add investigating status
-2. `src/hooks/useUnifiedRequests.tsx` - Add unassigned/SLA stats
-3. `src/pages/helpdesk/tickets/dashboard.tsx` - Add missing cards, fix colors
-4. `src/components/helpdesk/TicketTableView.tsx` - Add columns, row highlighting
-5. `src/components/helpdesk/ProblemTableView.tsx` - Status lifecycle, new columns
-6. `src/pages/helpdesk/tickets/list.tsx` - View tabs, filters
-7. `src/components/helpdesk/TicketConfiguration.tsx` - Reorder settings
-
-### Files to Modify (Minor Changes)
-8. `src/components/helpdesk/DashboardCharts.tsx` - Fix on_hold color
-9. `src/components/helpdesk/RecentTicketsList.tsx` - Use central colors
-10. `src/pages/helpdesk/dashboard.tsx` - Fix icon colors
-11. `src/components/helpdesk/BulkActionsButton.tsx` - Add assign/close actions
-12. `src/pages/helpdesk/sla.tsx` - Add change warnings
-
-### Database Changes
-1. Update `generate_unified_request_number` function for INC/SR prefixes
-2. Consider adding 'investigating' to problem status enum if constrained
-
----
-
-## Testing Checklist
-
-After implementation, validate:
-- [ ] All dashboard numbers match list data when filtered
-- [ ] Every card, pill, count, and badge is clickable
-- [ ] Zero "Unknown" values appear anywhere
-- [ ] SLA breaches are visible without opening tickets
-- [ ] Status colors are consistent across all views
-- [ ] Date formats are consistent
-- [ ] Ticket IDs follow INC/SR/PRB convention
-- [ ] Problem resolution requires root cause
-- [ ] Settings changes show appropriate warnings
-
----
-
-## Estimated Effort
-
-| Phase | Description | Effort |
-|-------|-------------|--------|
-| 1 | Global Status & Colors | 3 hours |
-| 2 | Dashboard Action Summary | 4 hours |
-| 3 | All Tickets List | 6 hours |
-| 4 | Problems Module | 5 hours |
-| 5 | Ticket Settings | 2 hours |
-| 6 | SLA Engine | 3 hours |
-| 7 | Visual & UX Polish | 3 hours |
-| **Total** | | **~26 hours** |
-
+1. **Phase 1**: Layout & Settings cleanup (remove duplicates)
+2. **Phase 2**: TicketModuleTopBar simplification
+3. **Phase 3**: Tickets List page restructure
+4. **Phase 4**: Problems page updates
+5. **Phase 5**: Dashboard enhancements
+6. **Phase 6**: Table view optimizations
