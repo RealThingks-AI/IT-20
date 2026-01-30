@@ -8,7 +8,7 @@ const routeTitles: Record<string, string> = {
   "/tickets/list": "All Tickets",
   "/tickets/create": "Create Ticket",
   "/tickets/problems": "Problem Management",
-  "/tickets/settings": "Ticket Settings",
+  "/tickets/settings": "Advanced",
   "/tickets/reports": "Ticket Reports",
   "/tickets/archive": "Closed Tickets Archive",
   "/tickets/assignment-rules": "Ticket Assignment Rules",

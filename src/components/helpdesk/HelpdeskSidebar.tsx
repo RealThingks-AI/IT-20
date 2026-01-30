@@ -59,7 +59,7 @@ const ticketChildren: SidebarChild[] = [{
   url: "/tickets/problems",
   icon: AlertTriangle
 }, {
-  title: "Settings",
+  title: "Advanced",
   url: "/tickets/settings",
   icon: Settings
 }];

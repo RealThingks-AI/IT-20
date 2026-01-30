@@ -5,15 +5,69 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, BarChart3, Settings, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
-import { TicketModuleTopBar } from "@/components/helpdesk/tickets/TicketModuleTopBar";
 import { ProblemTableView } from "@/components/helpdesk/ProblemTableView";
 import { TicketPagination } from "@/components/helpdesk/TicketPagination";
 import { BulkActionsProblemButton } from "@/components/helpdesk/BulkActionsProblemButton";
 import { CreateProblemDialog } from "@/components/helpdesk/CreateProblemDialog";
 import { EditProblemDialog } from "@/components/helpdesk/EditProblemDialog";
 import { AssignProblemDialog } from "@/components/helpdesk/AssignProblemDialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
+// CSV export utility
+const exportToCSV = (data: any[], filename: string) => {
+  if (!data || data.length === 0) {
+    toast.error("No data to export");
+    return;
+  }
+
+  const headers = ["Problem #", "Title", "Status", "Priority", "Category", "Assignee", "Created At"];
+  
+  const rows = data.map(item => {
+    return [
+      item.problem_number || "",
+      item.title || "",
+      item.status || "",
+      item.priority || "",
+      item.category?.name || "",
+      item.assigned_to_user?.name || "",
+      item.created_at || ""
+    ].map(value => {
+      const strVal = String(value);
+      if (strVal.includes(",") || strVal.includes('"') || strVal.includes("\n")) {
+        return `"${strVal.replace(/"/g, '""')}"`;
+      }
+      return strVal;
+    }).join(",");
+  });
+
+  const csvContent = [headers.join(","), ...rows].join("\n");
+  
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const link = document.createElement("a");
+  const url = URL.createObjectURL(blob);
+  link.setAttribute("href", url);
+  link.setAttribute("download", `${filename}.csv`);
+  link.style.visibility = "hidden";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  
+  toast.success(`Exported ${data.length} records to ${filename}.csv`);
+};
 
 export default function ProblemsPage() {
   const navigate = useNavigate();
@@ -129,77 +183,109 @@ export default function ProblemsPage() {
     setSelectedIds(checked ? pageProblems.map((p: any) => p.id) : []);
   };
 
-  const handleSearch = (query: string, filter: string) => {
-    setFilters({ ...filters, search: query });
-  };
-
   // Paginated data
   const paginatedProblems = problems.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   return (
     <div className="h-full flex flex-col bg-background">
-      <TicketModuleTopBar 
-        onSearch={handleSearch}
-        exportData={problems}
-        exportFilename="problems-export"
-        showArchiveLink={false}
-      >
-        {/* Filter controls in middle */}
-        <div className="flex items-center gap-2 flex-1">
-          <div className="relative w-[200px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <Input 
-              placeholder="Search problems..." 
-              value={filters.search || ''} 
-              onChange={e => setFilters({ ...filters, search: e.target.value })} 
-              className="pl-9 h-7 text-xs" 
+      {/* Unified Top Bar */}
+      <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm border-b">
+        <div className="flex items-center gap-2 px-3 py-1.5">
+          {/* Filter controls */}
+          <div className="flex items-center gap-2 flex-1">
+            <div className="relative w-[180px]">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input 
+                placeholder="Search problems..." 
+                value={filters.search || ''} 
+                onChange={e => setFilters({ ...filters, search: e.target.value })} 
+                className="pl-8 h-7 text-xs" 
+              />
+            </div>
+
+            <Select 
+              value={filters.status || 'all'} 
+              onValueChange={value => setFilters({ ...filters, status: value === 'all' ? null : value })}
+            >
+              <SelectTrigger className="w-[100px] h-7 text-xs">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="open">Open</SelectItem>
+                <SelectItem value="investigating">Investigating</SelectItem>
+                <SelectItem value="known_error">Known Error</SelectItem>
+                <SelectItem value="resolved">Resolved</SelectItem>
+                <SelectItem value="closed">Closed</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select 
+              value={filters.priority || 'all'} 
+              onValueChange={value => setFilters({ ...filters, priority: value === 'all' ? null : value })}
+            >
+              <SelectTrigger className="w-[90px] h-7 text-xs">
+                <SelectValue placeholder="Priority" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Priority</SelectItem>
+                <SelectItem value="urgent">Urgent</SelectItem>
+                <SelectItem value="high">High</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="low">Low</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <BulkActionsProblemButton 
+              selectedIds={selectedIds} 
+              onClearSelection={() => setSelectedIds([])} 
             />
           </div>
 
-          <Select 
-            value={filters.status || 'all'} 
-            onValueChange={value => setFilters({ ...filters, status: value === 'all' ? null : value })}
-          >
-            <SelectTrigger className="w-[120px] h-7 text-xs">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="open">Open</SelectItem>
-              <SelectItem value="investigating">Investigating</SelectItem>
-              <SelectItem value="known_error">Known Error</SelectItem>
-              <SelectItem value="resolved">Resolved</SelectItem>
-              <SelectItem value="closed">Closed</SelectItem>
-            </SelectContent>
-          </Select>
+          {/* Right side - Action buttons */}
+          <div className="flex items-center gap-1">
+            <TooltipProvider delayDuration={300}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => navigate("/tickets/reports")}
+                    className="h-7 w-7"
+                  >
+                    <BarChart3 className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">View Reports</TooltipContent>
+              </Tooltip>
 
-          <Select 
-            value={filters.priority || 'all'} 
-            onValueChange={value => setFilters({ ...filters, priority: value === 'all' ? null : value })}
-          >
-            <SelectTrigger className="w-[100px] h-7 text-xs">
-              <SelectValue placeholder="Priority" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Priority</SelectItem>
-              <SelectItem value="urgent">Urgent</SelectItem>
-              <SelectItem value="high">High</SelectItem>
-              <SelectItem value="medium">Medium</SelectItem>
-              <SelectItem value="low">Low</SelectItem>
-            </SelectContent>
-          </Select>
+              {/* Actions Dropdown */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-7 w-7">
+                    <Settings className="h-3.5 w-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-40">
+                  <DropdownMenuItem onClick={() => navigate("/tickets/settings")}>
+                    Column Settings
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => exportToCSV(problems, "problems-export")}>
+                    <FileSpreadsheet className="h-3.5 w-3.5 mr-2" />
+                    Export to CSV
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
 
-          <BulkActionsProblemButton 
-            selectedIds={selectedIds} 
-            onClearSelection={() => setSelectedIds([])} 
-          />
-
-          <Button size="sm" onClick={() => setCreateProblemOpen(true)} className="gap-1 h-7 px-3 ml-auto">
-            <Plus className="h-3.5 w-3.5" />
-            <span className="text-xs">New Problem</span>
-          </Button>
+              <Button size="sm" onClick={() => setCreateProblemOpen(true)} className="gap-1 h-7 px-3">
+                <Plus className="h-3.5 w-3.5" />
+                <span className="text-xs">New Problem</span>
+              </Button>
+            </TooltipProvider>
+          </div>
         </div>
-      </TicketModuleTopBar>
+      </div>
 
       {/* Content Area */}
       <div className="flex-1 overflow-hidden">
