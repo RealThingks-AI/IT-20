@@ -178,6 +178,57 @@ export type Database = {
           },
         ]
       }
+      category_tag_formats: {
+        Row: {
+          category_id: string
+          created_at: string | null
+          current_number: number | null
+          id: string
+          organisation_id: string | null
+          prefix: string
+          tenant_id: number | null
+          updated_at: string | null
+          zero_padding: number | null
+        }
+        Insert: {
+          category_id: string
+          created_at?: string | null
+          current_number?: number | null
+          id?: string
+          organisation_id?: string | null
+          prefix: string
+          tenant_id?: number | null
+          updated_at?: string | null
+          zero_padding?: number | null
+        }
+        Update: {
+          category_id?: string
+          created_at?: string | null
+          current_number?: number | null
+          id?: string
+          organisation_id?: string | null
+          prefix?: string
+          tenant_id?: number | null
+          updated_at?: string | null
+          zero_padding?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "category_tag_formats_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "itam_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "category_tag_formats_organisation_id_fkey"
+            columns: ["organisation_id"]
+            isOneToOne: false
+            referencedRelation: "organisations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       currencies: {
         Row: {
           code: string
@@ -4782,6 +4833,7 @@ export type Database = {
           notification_settings: Json | null
           time_format: string | null
           timezone: string | null
+          ui_settings: Json | null
           updated_at: string | null
           user_id: string | null
         }
@@ -4796,6 +4848,7 @@ export type Database = {
           notification_settings?: Json | null
           time_format?: string | null
           timezone?: string | null
+          ui_settings?: Json | null
           updated_at?: string | null
           user_id?: string | null
         }
@@ -4810,6 +4863,7 @@ export type Database = {
           notification_settings?: Json | null
           time_format?: string | null
           timezone?: string | null
+          ui_settings?: Json | null
           updated_at?: string | null
           user_id?: string | null
         }
@@ -4964,6 +5018,13 @@ export type Database = {
       can_activate_tool: { Args: { org_id: string }; Returns: boolean }
       can_enable_tool: { Args: { org_id: string }; Returns: boolean }
       check_and_flag_sla_breaches: { Args: never; Returns: undefined }
+      check_multiple_routes_access: {
+        Args: { _routes: string[] }
+        Returns: {
+          has_access: boolean
+          route: string
+        }[]
+      }
       check_page_access: { Args: { _route: string }; Returns: boolean }
       check_sla_breach: { Args: never; Returns: undefined }
       check_subscription_limit: {
@@ -5056,7 +5117,9 @@ export type Database = {
       get_user_org_if_admin: { Args: never; Returns: string }
       get_user_org_role: { Args: { _org_id: string }; Returns: string }
       get_user_role: { Args: { _user_id: string }; Returns: string }
-      get_user_tenant: { Args: { _user_id: string }; Returns: number }
+      get_user_tenant:
+        | { Args: never; Returns: number }
+        | { Args: { _user_id: string }; Returns: number }
       has_any_role: {
         Args: {
           _roles: Database["public"]["Enums"]["app_role"][]

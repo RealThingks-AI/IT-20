@@ -48,8 +48,14 @@ export const DetailsTab = ({ asset }: DetailsTabProps) => {
             <span>{asset.location?.name || '—'}</span>
           </div>
           <div className="flex justify-between text-sm py-1">
+            <span className="text-muted-foreground">Site</span>
+            <span>{asset.location?.site?.name || asset.custom_fields?.site_name || '—'}</span>
+          </div>
+          <div className="flex justify-between text-sm py-1">
             <span className="text-muted-foreground">Assigned To</span>
-            <span className="font-medium text-primary hover:underline cursor-pointer">{asset.assigned_to || '—'}</span>
+            <span className="font-medium text-primary hover:underline cursor-pointer">
+              {asset.assigned_user?.name || asset.assigned_user?.email || asset.assigned_to || '—'}
+            </span>
           </div>
 
           {/* Financial Section */}
@@ -62,29 +68,38 @@ export const DetailsTab = ({ asset }: DetailsTabProps) => {
           </div>
           <div className="flex justify-between text-sm py-1">
             <span className="text-muted-foreground">Purchase Price</span>
-            <span className="font-medium">₹{asset.purchase_price?.toLocaleString() || '0'}</span>
+            <span className="font-medium">
+              {(() => {
+                const currency = asset.custom_fields?.currency || 'INR';
+                const symbols: Record<string, string> = { INR: '₹', USD: '$', EUR: '€', GBP: '£' };
+                return `${symbols[currency] || '₹'}${asset.purchase_price?.toLocaleString() || '0'}`;
+              })()}
+            </span>
+          </div>
+          <div className="flex justify-between text-sm py-1">
+            <span className="text-muted-foreground">Current Value</span>
+            <span className="font-medium">
+              {(() => {
+                const currency = asset.custom_fields?.currency || 'INR';
+                const symbols: Record<string, string> = { INR: '₹', USD: '$', EUR: '€', GBP: '£' };
+                const currentVal = asset.current_value ?? asset.purchase_price;
+                return `${symbols[currency] || '₹'}${currentVal?.toLocaleString() || '0'}`;
+              })()}
+            </span>
+          </div>
+          <div className="flex justify-between text-sm py-1">
+            <span className="text-muted-foreground">Warranty Expiry</span>
+            <span>{asset.warranty_expiry ? format(new Date(asset.warranty_expiry), "dd/MM/yyyy") : '—'}</span>
           </div>
 
-          {/* Description */}
-          {asset.description && (
+          {/* Description - from notes field or description field */}
+          {(asset.notes || asset.description) && (
             <>
               <div className="col-span-2 mt-3 mb-2">
                 <h3 className="text-sm font-semibold mb-2">Description</h3>
               </div>
               <div className="col-span-2 text-sm py-1">
-                <p className="text-muted-foreground">{asset.description}</p>
-              </div>
-            </>
-          )}
-
-          {/* Notes */}
-          {asset.notes && (
-            <>
-              <div className="col-span-2 mt-3 mb-2">
-                <h3 className="text-sm font-semibold mb-2">Notes</h3>
-              </div>
-              <div className="col-span-2 text-sm py-1">
-                <p className="text-muted-foreground whitespace-pre-wrap">{asset.notes}</p>
+                <p className="text-muted-foreground whitespace-pre-wrap">{asset.notes || asset.description}</p>
               </div>
             </>
           )}

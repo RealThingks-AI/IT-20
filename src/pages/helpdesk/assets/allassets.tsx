@@ -9,6 +9,7 @@ import { AssetsList } from "@/components/helpdesk/assets/AssetsList";
 import { AssetModuleTopBar } from "@/components/helpdesk/assets/AssetModuleTopBar";
 import { useAssetSetupConfig } from "@/hooks/useAssetSetupConfig";
 import { Badge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 export default function AllAssets() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -19,8 +20,23 @@ export default function AllAssets() {
   });
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
   const [bulkActions, setBulkActions] = useState<any>(null);
-  const [columnsVersion, setColumnsVersion] = useState(0);
+  const [assetsData, setAssetsData] = useState<any[]>([]);
   const { categories } = useAssetSetupConfig();
+
+  // Confirmation dialog states
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    title: string;
+    description: string;
+    action: () => void;
+    variant: "default" | "destructive";
+  }>({
+    open: false,
+    title: "",
+    description: "",
+    action: () => {},
+    variant: "default",
+  });
 
   // Sync URL params to filters
   useEffect(() => {
@@ -66,47 +82,49 @@ export default function AllAssets() {
 
   const hasActiveFilters = filters.search || filters.status || filters.type;
 
+  // Confirmation handlers for destructive actions
+  const confirmBulkAction = (
+    title: string,
+    description: string,
+    action: () => void,
+    variant: "default" | "destructive" = "default"
+  ) => {
+    setConfirmDialog({
+      open: true,
+      title,
+      description,
+      action,
+      variant,
+    });
+  };
+
   return (
     <div className="min-h-screen bg-background">
-      <AssetModuleTopBar onColumnsChange={() => setColumnsVersion(v => v + 1)}>
+      <AssetModuleTopBar 
+        onColumnsChange={() => {/* React Query cache is auto-invalidated by useUISettings */}}
+        onSearch={(query) => handleSearchChange(query)}
+        exportData={assetsData}
+        exportFilename="assets-export"
+      >
         {/* Unified Filter Row - inside top bar */}
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Search Input */}
-          <div className="relative w-[180px] sm:w-[200px]">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <Input
-              placeholder="Search assets..."
-              value={filters.search || ""}
-              onChange={e => handleSearchChange(e.target.value)}
-              className="pl-8 h-7 text-xs"
-            />
-            {filters.search && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="absolute right-0.5 top-1/2 -translate-y-1/2 h-5 w-5"
-                onClick={() => handleSearchChange("")}
-              >
-                <X className="h-3 w-3" />
-              </Button>
-            )}
-          </div>
 
           {/* Status Filter */}
           <Select
             value={filters.status || "all"}
             onValueChange={handleStatusChange}
           >
-            <SelectTrigger className="w-[90px] h-7 text-xs">
+            <SelectTrigger className="w-[120px] h-7 text-xs">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Status</SelectItem>
               <SelectItem value="available">Available</SelectItem>
-              <SelectItem value="assigned">Assigned</SelectItem>
-              <SelectItem value="in_repair">In Repair</SelectItem>
-              <SelectItem value="lost">Lost</SelectItem>
+              <SelectItem value="in_use">In Use</SelectItem>
+              <SelectItem value="maintenance">Maintenance</SelectItem>
+              <SelectItem value="retired">Retired</SelectItem>
               <SelectItem value="disposed">Disposed</SelectItem>
+              <SelectItem value="lost">Lost</SelectItem>
             </SelectContent>
           </Select>
 
@@ -115,7 +133,7 @@ export default function AllAssets() {
             value={filters.typeName || "all"}
             onValueChange={handleTypeChange}
           >
-            <SelectTrigger className="w-[90px] h-7 text-xs">
+            <SelectTrigger className="w-[120px] h-7 text-xs">
               <SelectValue placeholder="Type" />
             </SelectTrigger>
             <SelectContent>
@@ -146,15 +164,36 @@ export default function AllAssets() {
                   <UserCheck className="mr-2 h-3.5 w-3.5" />
                   Check In
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={bulkActions.handleMaintenance}>
+                <DropdownMenuItem 
+                  onClick={() => confirmBulkAction(
+                    "Send to Maintenance",
+                    `Are you sure you want to mark ${selectedAssetIds.length} asset(s) as under maintenance?`,
+                    bulkActions.handleMaintenance
+                  )}
+                >
                   <Wrench className="mr-2 h-3.5 w-3.5" />
                   Maintenance
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={bulkActions.handleDispose}>
+                <DropdownMenuItem 
+                  onClick={() => confirmBulkAction(
+                    "Dispose Assets",
+                    `Are you sure you want to dispose ${selectedAssetIds.length} asset(s)? This will mark them as disposed.`,
+                    bulkActions.handleDispose,
+                    "destructive"
+                  )}
+                >
                   <Settings className="mr-2 h-3.5 w-3.5" />
                   Dispose
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={bulkActions.handleDelete} className="text-destructive">
+                <DropdownMenuItem 
+                  onClick={() => confirmBulkAction(
+                    "Delete Assets",
+                    `Are you sure you want to delete ${selectedAssetIds.length} asset(s)? This action cannot be undone.`,
+                    bulkActions.handleDelete,
+                    "destructive"
+                  )}
+                  className="text-destructive"
+                >
                   <Package className="mr-2 h-3.5 w-3.5" />
                   Delete
                 </DropdownMenuItem>
@@ -209,14 +248,28 @@ export default function AllAssets() {
 
         {/* Assets List */}
         <AssetsList
-          key={columnsVersion}
           filters={filters}
           onSelectionChange={(selectedIds, actions) => {
             setSelectedAssetIds(selectedIds);
             setBulkActions(actions);
           }}
+          onDataLoad={(data) => setAssetsData(data)}
         />
       </div>
+
+      {/* Confirmation Dialog */}
+      <ConfirmDialog
+        open={confirmDialog.open}
+        onOpenChange={(open) => setConfirmDialog(prev => ({ ...prev, open }))}
+        onConfirm={() => {
+          confirmDialog.action();
+          setConfirmDialog(prev => ({ ...prev, open: false }));
+        }}
+        title={confirmDialog.title}
+        description={confirmDialog.description}
+        confirmText="Confirm"
+        variant={confirmDialog.variant}
+      />
     </div>
   );
 }

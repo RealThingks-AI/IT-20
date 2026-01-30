@@ -2,9 +2,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Edit, Eye, UserPlus, MoreHorizontal } from "lucide-react";
-import { format } from "date-fns";
+import { Edit, Eye, UserPlus, MoreHorizontal, Link as LinkIcon, FileText } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,7 +13,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { getUserDisplayName } from "@/lib/userUtils";
+import { getStatusColor, getPriorityColor, formatStatus } from "@/lib/ticketUtils";
+import { FormattedDate } from "@/components/FormattedDate";
 
 interface ProblemTableViewProps {
   problems: any[];
@@ -25,12 +33,13 @@ interface ProblemTableViewProps {
   onQuickStatusChange?: (problemId: number, status: string) => void;
 }
 
+// ITIL-aligned problem status options
 const statusOptions = [
   { value: 'open', label: 'Open' },
-  { value: 'in_progress', label: 'In Progress' },
+  { value: 'investigating', label: 'Investigating' },
+  { value: 'known_error', label: 'Known Error' },
   { value: 'resolved', label: 'Resolved' },
   { value: 'closed', label: 'Closed' },
-  { value: 'known_error', label: 'Known Error' },
 ];
 
 export const ProblemTableView = ({ 
@@ -44,164 +53,211 @@ export const ProblemTableView = ({
 }: ProblemTableViewProps) => {
   const navigate = useNavigate();
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'open': return 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-700';
-      case 'in_progress': return 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-700';
-      case 'resolved': return 'bg-green-100 text-green-800 border-green-300 dark:bg-green-900/30 dark:text-green-400 dark:border-green-700';
-      case 'closed': return 'bg-gray-100 text-gray-800 border-gray-300 dark:bg-gray-900/30 dark:text-gray-400 dark:border-gray-700';
-      case 'known_error': return 'bg-red-100 text-red-800 border-red-300 dark:bg-red-900/30 dark:text-red-400 dark:border-red-700';
-      default: return 'bg-gray-100 text-gray-800 border-gray-300 dark:bg-gray-900/30 dark:text-gray-400 dark:border-gray-700';
+  const getRowClassName = (problem: any) => {
+    const classes = ["cursor-pointer hover:bg-muted/50 h-11"];
+    
+    // Known error - amber background for visibility
+    if (problem.status === 'known_error') {
+      classes.push("bg-amber-50/50 dark:bg-amber-950/10");
     }
+    // Unassigned active problem
+    else if (!problem.assigned_to && ['open', 'investigating'].includes(problem.status)) {
+      classes.push("bg-yellow-50/50 dark:bg-yellow-950/10");
+    }
+    
+    // Priority border indicators
+    if (problem.priority === 'urgent') {
+      classes.push("border-l-4 border-l-red-500");
+    } else if (problem.priority === 'high') {
+      classes.push("border-l-4 border-l-orange-500");
+    }
+    
+    return cn(...classes);
   };
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'urgent': return 'bg-red-500 hover:bg-red-600 text-white';
-      case 'high': return 'bg-orange-500 hover:bg-orange-600 text-white';
-      case 'medium': return 'bg-yellow-500 hover:bg-yellow-600 text-white';
-      case 'low': return 'bg-green-500 hover:bg-green-600 text-white';
-      default: return 'bg-gray-500 hover:bg-gray-600 text-white';
+  const getRCAStatus = (problem: any) => {
+    if (problem.root_cause) {
+      return (
+        <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300 dark:bg-green-900/30 dark:text-green-400 text-xs px-1.5 py-0.5">
+          Documented
+        </Badge>
+      );
     }
+    return (
+      <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-400 text-xs px-1.5 py-0.5">
+        Pending
+      </Badge>
+    );
   };
+
+  if (problems.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 text-center">
+        <div className="text-muted-foreground mb-2">No problems found</div>
+        <p className="text-sm text-muted-foreground">Try adjusting your filters or create a new problem.</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="border rounded-lg overflow-hidden text-[0.85rem]">
-      <Table>
-        <TableHeader>
-          <TableRow className="h-9 bg-muted/30">
-            <TableHead className="w-10 py-2">
-              <Checkbox
-                checked={selectedIds.length === problems.length && problems.length > 0}
-                onCheckedChange={onSelectAll}
-              />
-            </TableHead>
-            <TableHead className="py-2 font-medium">Problem #</TableHead>
-            <TableHead className="py-2 font-medium">Title</TableHead>
-            <TableHead className="py-2 font-medium">Status</TableHead>
-            <TableHead className="py-2 font-medium">Priority</TableHead>
-            <TableHead className="py-2 font-medium">Assignee</TableHead>
-            <TableHead className="py-2 font-medium">Created By</TableHead>
-            <TableHead className="py-2 font-medium">Category</TableHead>
-            <TableHead className="py-2 font-medium">Created</TableHead>
-            <TableHead className="text-right py-2 font-medium">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {problems.map((problem) => (
-            <TableRow key={problem.id} className="cursor-pointer hover:bg-muted/50 h-11">
-              <TableCell onClick={(e) => e.stopPropagation()} className="py-1.5">
+    <TooltipProvider>
+      <div className="border rounded-lg overflow-hidden text-sm">
+        <Table>
+          <TableHeader>
+            <TableRow className="h-9 bg-muted/30">
+              <TableHead className="w-10 py-2">
                 <Checkbox
-                  checked={selectedIds.includes(problem.id)}
-                  onCheckedChange={() => onSelectProblem(problem.id)}
+                  checked={selectedIds.length === problems.length && problems.length > 0}
+                  onCheckedChange={onSelectAll}
+                  aria-label="Select all problems"
                 />
-              </TableCell>
-              <TableCell onClick={() => navigate(`/helpdesk/problems/${problem.id}`)} className="py-1.5">
-                <span className="font-mono text-[0.85rem]">
-                  {problem.problem_number}
-                </span>
-              </TableCell>
-              <TableCell onClick={() => navigate(`/helpdesk/problems/${problem.id}`)} className="py-1.5">
-                <div className="max-w-sm">
-                  <div className="font-medium truncate text-[0.85rem]">{problem.title}</div>
-                  <div className="text-[0.75rem] text-muted-foreground truncate">
-                    {problem.description}
-                  </div>
-                </div>
-              </TableCell>
-              <TableCell onClick={(e) => e.stopPropagation()} className="py-1.5">
-                {onQuickStatusChange ? (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" className="h-auto p-0 hover:bg-transparent">
-                        <Badge variant="outline" className={`${getStatusColor(problem.status)} text-[0.75rem] px-1.5 py-0.5 cursor-pointer`}>
-                          {problem.status.replace('_', ' ')}
-                        </Badge>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="w-40">
-                      <DropdownMenuLabel className="text-xs">Change Status</DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      {statusOptions.map((option) => (
-                        <DropdownMenuItem
-                          key={option.value}
-                          onClick={() => onQuickStatusChange(problem.id, option.value)}
-                          className={`text-xs ${problem.status === option.value ? 'bg-accent' : ''}`}
-                        >
-                          {option.label}
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                ) : (
-                  <Badge variant="outline" className={`${getStatusColor(problem.status)} text-[0.75rem] px-1.5 py-0.5`}>
-                    {problem.status.replace('_', ' ')}
-                  </Badge>
-                )}
-              </TableCell>
-              <TableCell onClick={() => navigate(`/helpdesk/problems/${problem.id}`)} className="py-1.5">
-                <Badge className={`${getPriorityColor(problem.priority)} text-[0.75rem] px-1.5 py-0.5`}>
-                  {problem.priority}
-                </Badge>
-              </TableCell>
-              <TableCell onClick={() => navigate(`/helpdesk/problems/${problem.id}`)} className="py-1.5">
-                {getUserDisplayName(problem.assigned_to_user) || (
-                  <span className="text-muted-foreground italic text-[0.8rem]">Unassigned</span>
-                )}
-              </TableCell>
-              <TableCell onClick={() => navigate(`/helpdesk/problems/${problem.id}`)} className="py-1.5">
-                {getUserDisplayName(problem.created_by_user) || (
-                  <span className="text-muted-foreground italic text-[0.8rem]">Unknown</span>
-                )}
-              </TableCell>
-              <TableCell onClick={() => navigate(`/helpdesk/problems/${problem.id}`)} className="py-1.5">
-                {problem.category?.name || '-'}
-              </TableCell>
-              <TableCell onClick={() => navigate(`/helpdesk/problems/${problem.id}`)} className="py-1.5">
-                <div className="text-[0.8rem]">
-                  {format(new Date(problem.created_at), 'MMM dd, yyyy')}
-                </div>
-              </TableCell>
-              <TableCell className="text-right py-1.5" onClick={(e) => e.stopPropagation()}>
-                <div className="flex justify-end gap-0.5">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={() => navigate(`/helpdesk/problems/${problem.id}`)}
-                    title="View"
-                  >
-                    <Eye className="h-3.5 w-3.5" />
-                  </Button>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-7 w-7">
-                        <MoreHorizontal className="h-3.5 w-3.5" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-36">
-                      <DropdownMenuItem 
-                        onClick={() => onEditProblem?.(problem)}
-                        className="text-xs gap-2"
-                      >
-                        <Edit className="h-3.5 w-3.5" />
-                        Edit
-                      </DropdownMenuItem>
-                      <DropdownMenuItem 
-                        onClick={() => onAssignProblem?.(problem)}
-                        className="text-xs gap-2"
-                      >
-                        <UserPlus className="h-3.5 w-3.5" />
-                        Assign
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </TableCell>
+              </TableHead>
+              <TableHead className="py-2 font-medium">Problem #</TableHead>
+              <TableHead className="py-2 font-medium">Title</TableHead>
+              <TableHead className="py-2 font-medium">Status</TableHead>
+              <TableHead className="py-2 font-medium">Priority</TableHead>
+              <TableHead className="py-2 font-medium">Assignee</TableHead>
+              <TableHead className="py-2 font-medium">Created By</TableHead>
+              <TableHead className="py-2 font-medium">Category</TableHead>
+              <TableHead className="py-2 font-medium">Linked Tickets</TableHead>
+              <TableHead className="py-2 font-medium">RCA Status</TableHead>
+              <TableHead className="py-2 font-medium">Created</TableHead>
+              <TableHead className="text-right py-2 font-medium">Actions</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+          </TableHeader>
+          <TableBody>
+            {problems.map((problem) => (
+              <TableRow key={problem.id} className={getRowClassName(problem)}>
+                <TableCell onClick={(e) => e.stopPropagation()} className="py-1.5">
+                  <Checkbox
+                    checked={selectedIds.includes(problem.id)}
+                    onCheckedChange={() => onSelectProblem(problem.id)}
+                    aria-label={`Select problem ${problem.problem_number}`}
+                  />
+                </TableCell>
+                <TableCell onClick={() => navigate(`/helpdesk/problems/${problem.id}`)} className="py-1.5">
+                  <span className="font-mono text-xs">
+                    {problem.problem_number}
+                  </span>
+                </TableCell>
+                <TableCell onClick={() => navigate(`/helpdesk/problems/${problem.id}`)} className="py-1.5">
+                  <div className="max-w-sm">
+                    <div className="font-medium truncate text-sm" title={problem.title}>{problem.title}</div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {problem.description}
+                    </div>
+                  </div>
+                </TableCell>
+                <TableCell onClick={(e) => e.stopPropagation()} className="py-1.5">
+                  {onQuickStatusChange ? (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="h-auto p-0 hover:bg-transparent">
+                          <Badge variant="outline" className={`${getStatusColor(problem.status)} text-xs px-1.5 py-0.5 cursor-pointer`}>
+                            {formatStatus(problem.status)}
+                          </Badge>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="w-40">
+                        <DropdownMenuLabel className="text-xs">Change Status</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        {statusOptions.map((option) => (
+                          <DropdownMenuItem
+                            key={option.value}
+                            onClick={() => onQuickStatusChange(problem.id, option.value)}
+                            className={`text-xs ${problem.status === option.value ? 'bg-accent' : ''}`}
+                          >
+                            {option.label}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  ) : (
+                    <Badge variant="outline" className={`${getStatusColor(problem.status)} text-xs px-1.5 py-0.5`}>
+                      {formatStatus(problem.status)}
+                    </Badge>
+                  )}
+                </TableCell>
+                <TableCell onClick={() => navigate(`/helpdesk/problems/${problem.id}`)} className="py-1.5">
+                  <Badge className={`${getPriorityColor(problem.priority)} text-xs px-1.5 py-0.5`}>
+                    {problem.priority}
+                  </Badge>
+                </TableCell>
+                <TableCell onClick={() => navigate(`/helpdesk/problems/${problem.id}`)} className="py-1.5">
+                  {getUserDisplayName(problem.assigned_to_user) || (
+                    <span className="text-muted-foreground italic text-xs">Unassigned</span>
+                  )}
+                </TableCell>
+                <TableCell onClick={() => navigate(`/helpdesk/problems/${problem.id}`)} className="py-1.5">
+                  {getUserDisplayName(problem.created_by_user) || (
+                    <span className="text-muted-foreground italic text-xs">System</span>
+                  )}
+                </TableCell>
+                <TableCell onClick={() => navigate(`/helpdesk/problems/${problem.id}`)} className="py-1.5">
+                  {problem.category?.name || '-'}
+                </TableCell>
+                <TableCell onClick={() => navigate(`/helpdesk/problems/${problem.id}`)} className="py-1.5">
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <div className="flex items-center gap-1.5">
+                        <LinkIcon className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-xs font-medium">{problem.linked_tickets?.length || 0}</span>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{problem.linked_tickets?.length || 0} linked tickets</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TableCell>
+                <TableCell onClick={() => navigate(`/helpdesk/problems/${problem.id}`)} className="py-1.5">
+                  {getRCAStatus(problem)}
+                </TableCell>
+                <TableCell onClick={() => navigate(`/helpdesk/problems/${problem.id}`)} className="py-1.5">
+                  <div className="text-xs">
+                    <FormattedDate date={problem.created_at} format="short" />
+                  </div>
+                </TableCell>
+                <TableCell className="text-right py-1.5" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex justify-end gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={() => navigate(`/helpdesk/problems/${problem.id}`)}
+                      aria-label="View problem"
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="More actions">
+                          <MoreHorizontal className="h-3.5 w-3.5" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-36">
+                        <DropdownMenuItem 
+                          onClick={() => onEditProblem?.(problem)}
+                          className="text-xs gap-2"
+                        >
+                          <Edit className="h-3.5 w-3.5" />
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                          onClick={() => onAssignProblem?.(problem)}
+                          className="text-xs gap-2"
+                        >
+                          <UserPlus className="h-3.5 w-3.5" />
+                          Assign
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </TooltipProvider>
   );
 };

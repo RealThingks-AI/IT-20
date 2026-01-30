@@ -4,16 +4,21 @@ import { NotificationPanel } from "@/components/NotificationPanel";
 
 const routeTitles: Record<string, string> = {
   "/": "Dashboard",
-  "/tickets": "All Tickets",
+  "/tickets": "Tickets Dashboard",
+  "/tickets/list": "All Tickets",
   "/tickets/create": "Create Ticket",
+  "/tickets/problems": "Problem Management",
+  "/tickets/settings": "Ticket Settings",
+  "/tickets/reports": "Ticket Reports",
+  "/tickets/archive": "Closed Tickets Archive",
   "/tickets/assignment-rules": "Ticket Assignment Rules",
   "/tickets/closed-archive": "Closed Tickets Archive",
   "/tickets/linked-problems": "Linked Problems",
-  "/tickets/reports": "Ticket Reports",
   "/new": "New Ticket",
   "/queues": "Queues",
   "/sla": "SLA Policies",
   "/assets": "Assets Overview",
+  "/assets/add": "Add an Asset",
   "/assets/dashboard": "Asset Dashboard",
   "/assets/alerts": "Asset Alerts",
   "/assets/allassets": "All Assets",
@@ -68,23 +73,31 @@ const routeTitles: Record<string, string> = {
   "/audit": "Audit Logs",
   "/admin": "Admin Panel",
   "/settings": "Settings",
-  "/account": "Account Settings",
+  "/account": "Account Settings"
 };
+
+// Pages that render their own tabs/header in the portal area - don't show default title
+const pagesWithCustomHeader = [
+  "/reports",
+  "/monitoring",
+  "/audit"
+];
+
+// Pages that have their own inline h2 headers - don't show default title
+const pagesWithInlineHeader = [
+  "/automation",
+  "/sla",
+  "/queues",
+  "/changes",
+  "/dashboard"
+];
 
 const HelpdeskLayout = () => {
   const location = useLocation();
 
   // Handle dynamic routes
   let pageTitle = routeTitles[location.pathname] || "IT Helpdesk";
-  if (
-    location.pathname.startsWith("/tickets/") &&
-    location.pathname !== "/tickets" &&
-    !location.pathname.includes("/create") &&
-    !location.pathname.includes("/assignment-rules") &&
-    !location.pathname.includes("/closed-archive") &&
-    !location.pathname.includes("/linked-problems") &&
-    !location.pathname.includes("/reports")
-  ) {
+  if (location.pathname.startsWith("/tickets/") && location.pathname !== "/tickets" && !location.pathname.includes("/create") && !location.pathname.includes("/assignment-rules") && !location.pathname.includes("/closed-archive") && !location.pathname.includes("/archive") && !location.pathname.includes("/linked-problems") && !location.pathname.includes("/reports") && !location.pathname.includes("/list") && !location.pathname.includes("/problems") && !location.pathname.includes("/settings")) {
     pageTitle = "Ticket Details";
   } else if (location.pathname.startsWith("/problems/") && location.pathname !== "/problems") {
     pageTitle = "Problem Details";
@@ -108,15 +121,20 @@ const HelpdeskLayout = () => {
     pageTitle = "Update Details";
   }
 
+  // Determine if we should show the default header title
+  const hasCustomHeader = pagesWithCustomHeader.some(path => location.pathname === path);
+  const hasInlineHeader = pagesWithInlineHeader.some(path => location.pathname === path);
+  const showDefaultTitle = !hasCustomHeader && !hasInlineHeader;
+
   return (
     <div className="h-screen flex w-full overflow-hidden">
       <HelpdeskSidebar />
 
       <main className="flex-1 h-screen flex flex-col bg-background overflow-hidden will-change-auto">
         <header className="border-b px-4 flex items-center justify-between shrink-0 h-11">
-          <div id="helpdesk-header-left" className="flex items-center">
-{!location.pathname.startsWith("/tickets") && !location.pathname.startsWith("/problems") && !location.pathname.startsWith("/settings") && !location.pathname.startsWith("/assets") && (
-              <h1 className="text-sm font-medium">{pageTitle}</h1>
+          <div id="helpdesk-header-left" className="flex items-center gap-3">
+            {showDefaultTitle && (
+              <h1 className="text-sm font-semibold text-foreground">{pageTitle}</h1>
             )}
             <div id="settings-header-portal" />
           </div>

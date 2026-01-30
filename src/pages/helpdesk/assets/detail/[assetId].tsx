@@ -7,7 +7,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Edit, ChevronLeft, ChevronRight, Package } from "lucide-react";
+import { Edit, ChevronLeft, ChevronRight, Package, ZoomIn } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { DetailsTab } from "./[assetId]/tabs/DetailsTab";
@@ -21,15 +22,14 @@ import { DocsTab } from "./[assetId]/tabs/DocsTab";
 import { PhotosTab } from "./[assetId]/tabs/PhotosTab";
 import { ReserveTab } from "./[assetId]/tabs/ReserveTab";
 import { ContractsTab } from "./[assetId]/tabs/ContractsTab";
-import { EditAssetDialog } from "@/components/helpdesk/assets/EditAssetDialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 const AssetDetail = () => {
   const { assetId } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
 
   // Fetch asset details with related data
   const { data: asset, isLoading } = useQuery({
@@ -41,7 +41,7 @@ const AssetDetail = () => {
           *,
           category:itam_categories(id, name),
           department:itam_departments(id, name),
-          location:itam_locations(id, name),
+          location:itam_locations(id, name, site:itam_sites(id, name)),
           make:itam_makes(id, name),
           vendor:itam_vendors(id, name)
         `)
@@ -53,32 +53,56 @@ const AssetDetail = () => {
     enabled: !!assetId
   });
 
-  // Fetch all asset IDs for navigation
-  const { data: allAssetIds = [] } = useQuery({
-    queryKey: ["all-asset-ids"],
+  // Fetch adjacent assets for navigation (optimized - only get prev/next)
+  const { data: adjacentAssets } = useQuery({
+    queryKey: ["adjacent-assets", assetId],
     queryFn: async () => {
-      const { data } = await supabase
+      // Get current asset's created_at for cursor-based navigation
+      const { data: currentAsset } = await supabase
+        .from("itam_assets")
+        .select("created_at")
+        .eq("id", assetId)
+        .single();
+      
+      if (!currentAsset) return { prev: null, next: null };
+      
+      // Get previous asset (newer than current)
+      const { data: prevAsset } = await supabase
         .from("itam_assets")
         .select("id")
         .eq("is_active", true)
-        .order("created_at", { ascending: false });
-      return data?.map(a => a.id) || [];
-    }
+        .gt("created_at", currentAsset.created_at)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .single();
+      
+      // Get next asset (older than current)
+      const { data: nextAsset } = await supabase
+        .from("itam_assets")
+        .select("id")
+        .eq("is_active", true)
+        .lt("created_at", currentAsset.created_at)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single();
+      
+      return { prev: prevAsset?.id || null, next: nextAsset?.id || null };
+    },
+    enabled: !!assetId
   });
 
-  const currentIndex = allAssetIds.indexOf(assetId || "");
-  const hasPrev = currentIndex > 0;
-  const hasNext = currentIndex < allAssetIds.length - 1;
+  const hasPrev = !!adjacentAssets?.prev;
+  const hasNext = !!adjacentAssets?.next;
 
   const goToPrev = () => {
-    if (hasPrev) {
-      navigate(`/assets/detail/${allAssetIds[currentIndex - 1]}`);
+    if (hasPrev && adjacentAssets?.prev) {
+      navigate(`/assets/detail/${adjacentAssets.prev}`);
     }
   };
 
   const goToNext = () => {
-    if (hasNext) {
-      navigate(`/assets/detail/${allAssetIds[currentIndex + 1]}`);
+    if (hasNext && adjacentAssets?.next) {
+      navigate(`/assets/detail/${adjacentAssets.next}`);
     }
   };
 
@@ -162,16 +186,13 @@ const AssetDetail = () => {
         updateAssetStatus.mutate({ status: "available" });
         break;
       case "check_out":
-        updateAssetStatus.mutate({ status: "assigned" });
+        updateAssetStatus.mutate({ status: "in_use" });
         break;
       case "lost":
         updateAssetStatus.mutate({ status: "lost" });
         break;
       case "repair":
-        updateAssetStatus.mutate({ status: "in_repair" });
-        break;
-      case "broken":
-        updateAssetStatus.mutate({ status: "broken" });
+        updateAssetStatus.mutate({ status: "maintenance" });
         break;
       case "dispose":
         updateAssetStatus.mutate({ status: "disposed" });
@@ -188,8 +209,8 @@ const AssetDetail = () => {
   const getStatusColor = (status: string | null) => {
     switch (status) {
       case "available": return "default";
-      case "assigned": return "secondary";
-      case "in_repair": return "destructive";
+      case "in_use": return "secondary";
+      case "maintenance": return "destructive";
       case "retired": return "outline";
       default: return "secondary";
     }
@@ -218,8 +239,8 @@ const AssetDetail = () => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div>
-              <h1 className="text-lg font-bold">{asset.name}</h1>
-              <p className="text-xs text-muted-foreground">{asset.category?.name || 'Asset'}</p>
+              <h1 className="text-lg font-bold">{asset.category?.name || 'Asset'}</h1>
+              <p className="text-xs text-muted-foreground">{asset.asset_id || asset.asset_tag || 'No ID'}</p>
             </div>
           </div>
           
@@ -235,7 +256,7 @@ const AssetDetail = () => {
             </Button>
 
             {/* Edit Asset Button */}
-            <Button variant="outline" size="sm" onClick={() => setIsEditDialogOpen(true)} className="gap-1">
+            <Button variant="outline" size="sm" onClick={() => navigate(`/assets/add?edit=${assetId}`)} className="gap-1">
               <Edit className="h-4 w-4" />
               Edit Asset
             </Button>
@@ -257,14 +278,11 @@ const AssetDetail = () => {
                     Check In
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuItem onClick={() => handleAction("lost")}>
-                  Lost
-                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => handleAction("repair")}>
-                  Repair
+                  Repair / Maintenance
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleAction("broken")}>
-                  Broken
+                <DropdownMenuItem onClick={() => handleAction("lost")}>
+                  Mark as Lost
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => handleAction("dispose")}>
                   Dispose
@@ -284,14 +302,54 @@ const AssetDetail = () => {
         <Card>
           <CardContent className="p-4">
             <div className="flex gap-4">
-              {/* Asset Placeholder */}
+              {/* Asset Photo or Placeholder */}
               <div className="flex-shrink-0">
-                <div className="w-48 h-36 rounded-lg border bg-muted flex items-center justify-center overflow-hidden">
-                  <div className="text-center p-4">
-                    <Package className="h-12 w-12 mx-auto mb-2 text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground">{asset.name}</p>
-                  </div>
-                </div>
+                {(() => {
+                  const customFields = asset.custom_fields as Record<string, any> | null;
+                  const photoUrl = customFields?.photo_url;
+                  
+                  if (photoUrl) {
+                    return (
+                      <div className="relative w-48 h-36 rounded-lg border bg-muted overflow-hidden group">
+                        <img 
+                          src={photoUrl} 
+                          alt={asset.category?.name || 'Asset'} 
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = 'none';
+                            target.parentElement!.innerHTML = `
+                              <div class="w-full h-full flex items-center justify-center">
+                                <div class="text-center p-4">
+                                  <svg class="h-12 w-12 mx-auto mb-2 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16.5 9.4 7.55 4.24"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.29 7 12 12 20.71 7"/><line x1="12" x2="12" y1="22" y2="12"/></svg>
+                                  <p class="text-sm text-muted-foreground">Image failed</p>
+                                </div>
+                              </div>
+                            `;
+                          }}
+                        />
+                        {/* Zoom button at bottom right */}
+                        <Button
+                          variant="secondary"
+                          size="icon"
+                          className="absolute bottom-2 right-2 h-8 w-8 bg-primary hover:bg-primary/90 text-primary-foreground shadow-md"
+                          onClick={() => setImagePreviewOpen(true)}
+                        >
+                          <ZoomIn className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    );
+                  }
+                  
+                  return (
+                    <div className="w-48 h-36 rounded-lg border bg-muted flex items-center justify-center overflow-hidden">
+                      <div className="text-center p-4">
+                        <Package className="h-12 w-12 mx-auto mb-2 text-muted-foreground" />
+                        <p className="text-sm text-muted-foreground">{asset.model || 'No Image'}</p>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Asset Details - Two Tables */}
@@ -348,7 +406,7 @@ const AssetDetail = () => {
                         <td className="p-2 text-sm font-semibold">Status</td>
                         <td className="p-2 text-sm">
                           <Badge variant="outline" className={`${getStatusColor(asset.status) === 'default' ? 'bg-green-100 text-green-800' : ''} capitalize`}>
-                            {asset.status === 'assigned' ? 'Checked out' : asset.status || 'available'}
+                            {asset.status === 'in_use' ? 'Checked out' : asset.status || 'available'}
                           </Badge>
                         </td>
                       </tr>
@@ -422,13 +480,6 @@ const AssetDetail = () => {
         </Tabs>
       </div>
 
-      {/* Edit Dialog */}
-      <EditAssetDialog 
-        open={isEditDialogOpen} 
-        onOpenChange={setIsEditDialogOpen} 
-        asset={asset}
-      />
-
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog
         open={deleteConfirmOpen}
@@ -439,6 +490,31 @@ const AssetDetail = () => {
         variant="destructive"
         onConfirm={() => deleteAsset.mutate()}
       />
+
+      {/* Image Preview Dialog */}
+      <Dialog open={imagePreviewOpen} onOpenChange={setImagePreviewOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ZoomIn className="h-4 w-4" />
+              {asset.category?.name || 'Asset'} - {asset.asset_id || asset.asset_tag || 'Photo'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex items-center justify-center p-4">
+            {(() => {
+              const customFields = asset.custom_fields as Record<string, any> | null;
+              const photoUrl = customFields?.photo_url;
+              return photoUrl ? (
+                <img
+                  src={photoUrl}
+                  alt={asset.category?.name || 'Asset'}
+                  className="max-h-[70vh] w-auto rounded-lg object-contain"
+                />
+              ) : null;
+            })()}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

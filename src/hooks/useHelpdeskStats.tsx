@@ -1,9 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
+/**
+ * Simplified helpdesk stats hook for single-company internal use.
+ * Fetches all ticket data without organisation/tenant filtering.
+ */
 export const useHelpdeskStats = () => {
   return useQuery({
     queryKey: ["helpdesk-dashboard-stats"],
+    staleTime: 5 * 60 * 1000,  // 5 minutes
+    gcTime: 10 * 60 * 1000,    // 10 minutes cache retention
     queryFn: async () => {
       const { data: tickets, error } = await supabase
         .from("helpdesk_tickets")

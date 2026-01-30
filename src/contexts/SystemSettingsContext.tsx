@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, ReactNode } from 'react';
+import { useUISettings, SystemSettingsSetting } from '@/hooks/useUISettings';
 
 interface SystemSettings {
   timezone: string;
@@ -11,6 +12,7 @@ interface SystemSettings {
 interface SystemSettingsContextType {
   settings: SystemSettings;
   updateSettings: (newSettings: Partial<SystemSettings>) => void;
+  isLoading: boolean;
 }
 
 const defaultSettings: SystemSettings = {
@@ -24,21 +26,27 @@ const defaultSettings: SystemSettings = {
 const SystemSettingsContext = createContext<SystemSettingsContextType | undefined>(undefined);
 
 export const SystemSettingsProvider = ({ children }: { children: ReactNode }) => {
-  const [settings, setSettings] = useState<SystemSettings>(() => {
-    const saved = localStorage.getItem('systemSettings');
-    return saved ? { ...defaultSettings, ...JSON.parse(saved) } : defaultSettings;
-  });
+  const { systemSettings, isLoading, isAuthenticated, updateSystemSettings } = useUISettings();
 
-  const updateSettings = (newSettings: Partial<SystemSettings>) => {
-    setSettings(prev => {
-      const updated = { ...prev, ...newSettings };
-      localStorage.setItem('systemSettings', JSON.stringify(updated));
-      return updated;
-    });
+  // Merge database settings with defaults
+  const settings: SystemSettings = {
+    ...defaultSettings,
+    ...(systemSettings || {}),
+  };
+
+  const updateSettings = async (newSettings: Partial<SystemSettings>) => {
+    if (isAuthenticated) {
+      try {
+        const merged: SystemSettingsSetting = { ...settings, ...newSettings };
+        await updateSystemSettings(merged);
+      } catch (error) {
+        console.error('Failed to update system settings:', error);
+      }
+    }
   };
 
   return (
-    <SystemSettingsContext.Provider value={{ settings, updateSettings }}>
+    <SystemSettingsContext.Provider value={{ settings, updateSettings, isLoading }}>
       {children}
     </SystemSettingsContext.Provider>
   );

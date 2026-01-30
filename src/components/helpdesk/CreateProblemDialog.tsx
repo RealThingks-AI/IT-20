@@ -35,7 +35,7 @@ import { Loader2 } from "lucide-react";
 const problemSchema = z.object({
   title: z.string().min(1, "Title is required"),
   description: z.string().min(1, "Description is required"),
-  priority: z.enum(["low", "medium", "high", "critical"]),
+  priority: z.enum(["low", "medium", "high", "urgent"]),
   category_id: z.string().optional(),
   linked_ticket_id: z.string().optional(),
   root_cause: z.string().optional(),
@@ -209,13 +209,13 @@ export const CreateProblemDialog = ({
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField
               control={form.control}
               name="title"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Title</FormLabel>
+                  <FormLabel>Title *</FormLabel>
                   <FormControl>
                     <Input placeholder="Brief problem title" {...field} />
                   </FormControl>
@@ -229,7 +229,7 @@ export const CreateProblemDialog = ({
               name="description"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Description</FormLabel>
+                  <FormLabel>Description *</FormLabel>
                   <FormControl>
                     <Textarea
                       placeholder="Detailed description of the problem"
@@ -259,7 +259,7 @@ export const CreateProblemDialog = ({
                         <SelectItem value="low">Low</SelectItem>
                         <SelectItem value="medium">Medium</SelectItem>
                         <SelectItem value="high">High</SelectItem>
-                        <SelectItem value="critical">Critical</SelectItem>
+                        <SelectItem value="urgent">Urgent</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />

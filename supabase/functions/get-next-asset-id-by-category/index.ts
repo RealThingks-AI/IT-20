@@ -84,7 +84,7 @@ serve(async (req) => {
           error: 'Tag Format not configured for this Category. Please configure it under Setup → Tag Format.',
           needsConfiguration: true
         }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 

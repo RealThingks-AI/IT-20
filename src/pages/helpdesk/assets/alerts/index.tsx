@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { AssetTopBar } from "@/components/helpdesk/assets/AssetTopBar";
+import { AssetModuleTopBar } from "@/components/helpdesk/assets/AssetModuleTopBar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -104,7 +104,7 @@ const AlertsPage = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <AssetTopBar />
+      <AssetModuleTopBar />
       
       <div className="p-4 space-y-4">
         {/* Summary Cards */}

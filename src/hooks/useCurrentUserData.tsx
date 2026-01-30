@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 export interface CurrentUserData {
   authUserId: string;
   email: string | undefined;
-  organisationId: string | null;
+  organisationId: string;
   tenantId: number;
   role: string | null;
   name: string | null;
@@ -13,6 +13,8 @@ export interface CurrentUserData {
 export const useCurrentUserData = () => {
   return useQuery({
     queryKey: ["current-user-data"],
+    staleTime: 10 * 60 * 1000,  // 10 minutes - user data rarely changes
+    gcTime: 30 * 60 * 1000,     // 30 minutes cache retention
     queryFn: async (): Promise<CurrentUserData | null> => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return null;
@@ -20,27 +22,19 @@ export const useCurrentUserData = () => {
       // Get user data from users table
       const { data: userData } = await supabase
         .from("users")
-        .select("id, organisation_id, email, name, role")
+        .select("id, email, name, role")
         .eq("auth_user_id", user.id)
         .maybeSingle();
 
-      // Get profile data (for tenant_id)
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("tenant_id")
-        .eq("id", user.id)
-        .maybeSingle();
-
+      // Return static org values for single-company mode
       return {
         authUserId: user.id,
         email: user.email,
-        organisationId: userData?.organisation_id || null,
-        tenantId: profileData?.tenant_id || 1,
+        organisationId: 'single-company',
+        tenantId: 1,
         role: userData?.role || null,
         name: userData?.name || null,
       };
     },
-    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
-    gcTime: 1000 * 60 * 10, // Keep in cache for 10 minutes
   });
 };

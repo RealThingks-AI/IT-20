@@ -36,8 +36,8 @@ export function useUserRole(): UserRoleResult {
       return data as AppRole | null;
     },
     enabled: !!user?.id && !authLoading,
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
-    gcTime: 10 * 60 * 1000,
+    staleTime: 10 * 60 * 1000, // Cache for 10 minutes - role rarely changes
+    gcTime: 15 * 60 * 1000, // 15 minutes cache retention
   });
 
   const currentRole = role || null;

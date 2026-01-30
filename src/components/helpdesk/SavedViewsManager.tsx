@@ -136,7 +136,10 @@ export const SavedViewsManager = ({
   return <>
       <Popover open={isOpen} onOpenChange={setIsOpen}>
         <PopoverTrigger asChild>
-          
+          <Button variant="outline" size="sm" className="h-7 gap-1.5">
+            <Bookmark className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Views</span>
+          </Button>
         </PopoverTrigger>
         <PopoverContent className="w-64 p-0" align="start">
           <div className="p-2 border-b">

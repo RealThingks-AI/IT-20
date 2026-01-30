@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +8,10 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { AUTH_CONFIG } from "@/config/auth";
+import appLogo from "@/assets/app-logo.png";
+
 const Login = () => {
+  const queryClient = useQueryClient();
   const [isSignup, setIsSignup] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -15,17 +19,11 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const navigate = useNavigate();
-  const {
-    toast
-  } = useToast();
+  const { toast } = useToast();
 
   // Check if already logged in
   useEffect(() => {
-    supabase.auth.getSession().then(({
-      data: {
-        session
-      }
-    }) => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         navigate("/");
       }
@@ -40,6 +38,7 @@ const Login = () => {
       setRememberMe(true);
     }
   }, []);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -49,9 +48,7 @@ const Login = () => {
       } else {
         localStorage.removeItem("rememberedEmail");
       }
-      const {
-        error
-      } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signInWithPassword({
         email,
         password
       });
@@ -66,6 +63,54 @@ const Login = () => {
         }
         throw error;
       }
+
+      // Clear stale permission cache to prevent false denials
+      localStorage.removeItem('page-permissions-cache');
+
+      // Prefetch critical data after successful login for faster initial load
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (authUser) {
+        // Prefetch user role and page permissions in parallel
+        const parentRoutes = ['/', '/tickets', '/assets', '/subscription', '/system-updates', '/monitoring', '/reports', '/audit', '/settings'];
+        
+        await Promise.all([
+          // Prefetch user role
+          queryClient.prefetchQuery({
+            queryKey: ["user-role", authUser.id],
+            queryFn: async () => {
+              const { data } = await supabase.rpc("get_user_role", { _user_id: authUser.id });
+              return data;
+            },
+          }),
+
+          // Prefetch page permissions for sidebar
+          queryClient.prefetchQuery({
+            queryKey: ["page-access-multiple", parentRoutes.join(","), authUser.id],
+            queryFn: async () => {
+              const { data } = await supabase.rpc("check_multiple_routes_access", { 
+                _routes: parentRoutes 
+              });
+              // Also cache to localStorage for instant sidebar render
+              if (Array.isArray(data)) {
+                const accessMap: Record<string, boolean> = {};
+                data.forEach((item: { route: string; has_access: boolean }) => {
+                  accessMap[item.route] = item.has_access;
+                });
+                try {
+                  localStorage.setItem('page-permissions-cache', JSON.stringify({
+                    userId: authUser.id,
+                    permissions: accessMap,
+                    timestamp: Date.now(),
+                  }));
+                } catch { /* ignore */ }
+                return accessMap;
+              }
+              return {};
+            },
+          }),
+        ]);
+      }
+
       toast({
         title: "Success",
         description: "Logged in successfully!"
@@ -81,6 +126,7 @@ const Login = () => {
       setLoading(false);
     }
   };
+
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password.length < 6) {
@@ -95,9 +141,7 @@ const Login = () => {
     try {
       const redirectUrl = AUTH_CONFIG.getSignupRedirectUrl();
       console.log('Signup redirect URL:', redirectUrl);
-      const {
-        error
-      } = await supabase.auth.signUp({
+      const { error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -124,11 +168,16 @@ const Login = () => {
       setLoading(false);
     }
   };
-  return <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-background via-muted/20 to-background">
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-background via-muted/20 to-background">
       <div className="w-full max-w-md animate-fade-in">
         <div className="bg-card rounded-lg border border-border shadow-lg p-6">
           {/* Header */}
           <div className="text-center mb-6">
+            <div className="flex items-center justify-center mb-3">
+              <img src={appLogo} alt="RT-IT-Hub" className="w-12 h-12" />
+            </div>
             <h1 className="text-2xl font-bold text-foreground">
               {isSignup ? "Create your RT-IT-Hub account" : "Sign in to RT-IT-Hub"}
             </h1>
@@ -137,8 +186,9 @@ const Login = () => {
             </p>
           </div>
 
-          {!isSignup ? (/* Login Form */
-        <form onSubmit={handleLogin} className="space-y-4">
+          {!isSignup ? (
+            /* Login Form */
+            <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="name@company.com" autoFocus autoComplete="email" />
@@ -162,13 +212,12 @@ const Login = () => {
               </div>
 
               <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Signing in..." : <>
-                    
-                    Sign in
-                  </>}
+                {loading ? "Signing in..." : "Sign in"}
               </Button>
-            </form>) : (/* Signup Form */
-        <form onSubmit={handleSignup} className="space-y-4">
+            </form>
+          ) : (
+            /* Signup Form */
+            <form onSubmit={handleSignup} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Full Name</Label>
                 <Input id="name" type="text" value={name} onChange={e => setName(e.target.value)} required placeholder="Enter your full name" autoFocus />
@@ -187,22 +236,27 @@ const Login = () => {
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? "Creating account..." : "Create Account"}
               </Button>
-            </form>)}
+            </form>
+          )}
 
           {/* Toggle between Login/Signup */}
           <div className="mt-6 text-center text-sm">
-            {isSignup ? <p className="text-muted-foreground">
+            {isSignup ? (
+              <p className="text-muted-foreground">
                 Already have an account?{" "}
                 <button type="button" onClick={() => {
-              setIsSignup(false);
-              setPassword("");
-            }} className="text-primary hover:underline font-medium">
+                  setIsSignup(false);
+                  setPassword("");
+                }} className="text-primary hover:underline font-medium">
                   Sign in
                 </button>
-              </p> : null}
+              </p>
+            ) : null}
           </div>
         </div>
       </div>
-    </div>;
+    </div>
+  );
 };
+
 export default Login;

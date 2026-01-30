@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { AssetTopBar } from "@/components/helpdesk/assets/AssetTopBar";
+import { BackButton } from "@/components/BackButton";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,8 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { CalendarIcon, Search, UserCheck, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useOrganisationUsers } from "@/hooks/useOrganisationUsers";
+import { getUserDisplayName } from "@/lib/userUtils";
 
 const CheckoutPage = () => {
   const navigate = useNavigate();
@@ -48,18 +50,8 @@ const CheckoutPage = () => {
     },
   });
 
-  // Fetch users for assignment
-  const { data: users = [] } = useQuery({
-    queryKey: ["users-for-assignment"],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("users")
-        .select("id, name, email")
-        .eq("status", "active")
-        .order("name");
-      return data || [];
-    },
-  });
+  // Fetch users from organisation (centralized hook)
+  const { data: users = [] } = useOrganisationUsers();
 
   // Checkout mutation
   const checkoutMutation = useMutation({
@@ -82,10 +74,10 @@ const CheckoutPage = () => {
 
       if (assignError) throw assignError;
 
-      // Update asset statuses
+      // Update asset statuses to in_use (matches database constraint)
       const { error: updateError } = await supabase
         .from("itam_assets")
-        .update({ status: "assigned" })
+        .update({ status: "in_use" })
         .in("id", selectedAssets);
 
       if (updateError) throw updateError;
@@ -114,9 +106,11 @@ const CheckoutPage = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <AssetTopBar />
-      
       <div className="p-4 space-y-4">
+        <div className="flex items-center gap-4">
+          <BackButton />
+          <h1 className="text-xl font-semibold">Check Out Assets</h1>
+        </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Asset Selection */}
           <Card className="lg:col-span-2">
@@ -215,7 +209,7 @@ const CheckoutPage = () => {
                   <SelectContent>
                     {users.map((user) => (
                       <SelectItem key={user.id} value={user.id}>
-                        {user.name || user.email}
+                        {getUserDisplayName(user) || user.email}
                       </SelectItem>
                     ))}
                   </SelectContent>

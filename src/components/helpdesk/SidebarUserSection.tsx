@@ -38,11 +38,12 @@ export function SidebarUserSection({ collapsed }: SidebarUserSectionProps) {
         .from("users")
         .select("id, name, email, role")
         .eq("auth_user_id", user.id)
-        .single();
+        .maybeSingle();
       return data;
     },
     enabled: !!user?.id,
-    staleTime: 1000 * 60 * 5,
+    staleTime: 10 * 60 * 1000, // 10 minutes - profile rarely changes
+    gcTime: 15 * 60 * 1000, // 15 minutes cache
   });
 
   const userName = userProfile?.name || user?.email?.split("@")[0] || "User";
@@ -76,12 +77,14 @@ export function SidebarUserSection({ collapsed }: SidebarUserSectionProps) {
             <Tooltip>
               <TooltipTrigger asChild>
                 <DropdownMenuTrigger asChild>
-                  <button className="flex items-center justify-center w-full h-8 rounded-lg transition-all duration-200 hover:bg-accent/40">
-                    <Avatar className="h-6 w-6">
-                      <AvatarFallback className="text-[10px] bg-primary/10 text-primary">
-                        {getInitials(userName)}
-                      </AvatarFallback>
-                    </Avatar>
+                  <button className="flex items-center h-8 w-full rounded-lg transition-all duration-200 hover:bg-accent/40">
+                    <div className="w-12 flex items-center justify-center flex-shrink-0">
+                      <Avatar className="h-7 w-7">
+                        <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                          {getInitials(userName)}
+                        </AvatarFallback>
+                      </Avatar>
+                    </div>
                   </button>
                 </DropdownMenuTrigger>
               </TooltipTrigger>
@@ -110,17 +113,19 @@ export function SidebarUserSection({ collapsed }: SidebarUserSectionProps) {
     <div className="p-1.5 border-t border-border">
       <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger asChild>
-          <button className="flex items-center gap-2.5 w-full px-2 py-1.5 rounded-lg transition-all duration-200 hover:bg-accent/40 text-left">
-            <Avatar className="h-7 w-7 flex-shrink-0">
-              <AvatarFallback className="text-xs bg-primary/10 text-primary">
-                {getInitials(userName)}
-              </AvatarFallback>
-            </Avatar>
+          <button className="flex items-center h-8 w-full rounded-lg transition-all duration-200 hover:bg-accent/40 text-left">
+            <div className="w-12 flex items-center justify-center flex-shrink-0">
+              <Avatar className="h-7 w-7">
+                <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                  {getInitials(userName)}
+                </AvatarFallback>
+              </Avatar>
+            </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-medium truncate">{userName}</p>
             </div>
             <ChevronUp className={cn(
-              "h-3.5 w-3.5 text-muted-foreground transition-transform flex-shrink-0",
+              "h-3.5 w-3.5 text-muted-foreground transition-transform flex-shrink-0 mr-2",
               open && "rotate-180"
             )} />
           </button>

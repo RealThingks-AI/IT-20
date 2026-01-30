@@ -216,7 +216,7 @@ export const CreateTicketDialog = ({ open, onOpenChange }: CreateTicketDialogPro
               name="title"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Title</FormLabel>
+                  <FormLabel>Title *</FormLabel>
                   <FormControl>
                     <Input placeholder="Brief description of the issue" {...field} />
                   </FormControl>
@@ -230,7 +230,7 @@ export const CreateTicketDialog = ({ open, onOpenChange }: CreateTicketDialogPro
               name="description"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Description</FormLabel>
+                  <FormLabel>Description *</FormLabel>
                   <FormControl>
                     <Textarea
                       placeholder="Provide detailed information about your request..."

@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,7 +12,8 @@ import {
   Plus,
   FileText,
   TrendingUp,
-  Settings
+  LogOut,
+  LogIn
 } from "lucide-react";
 import { BackButton } from "@/components/BackButton";
 
@@ -56,11 +56,11 @@ const ITAMDashboard = () => {
     },
   });
 
-  // Calculate KPIs
+  // Calculate KPIs - using correct database status values
   const totalAssets = assets.length;
   const availableAssets = assets.filter(a => a.status === "available").length;
-  const assignedAssets = assets.filter(a => a.status === "assigned").length;
-  const inRepairAssets = assets.filter(a => a.status === "in_repair").length;
+  const assignedAssets = assets.filter(a => a.status === "in_use").length;
+  const inRepairAssets = assets.filter(a => a.status === "maintenance").length;
   
   const totalLicenses = licenses.reduce((sum, l) => sum + (l.seats_total || 0), 0);
   const allocatedLicenses = licenses.reduce((sum, l) => sum + (l.seats_allocated || 0), 0);
@@ -88,7 +88,7 @@ const ITAMDashboard = () => {
       value: assignedAssets,
       icon: UserCheck,
       description: "Currently in use",
-      onClick: () => navigate("/assets/allassets?status=assigned"),
+      onClick: () => navigate("/assets/allassets?status=in_use"),
     },
     {
       title: "In Repair",
@@ -115,11 +115,12 @@ const ITAMDashboard = () => {
 
   const quickActions = [
     { label: "Add Asset", icon: Plus, onClick: () => navigate("/assets/add") },
+    { label: "Check Out", icon: LogOut, onClick: () => navigate("/assets/checkout") },
+    { label: "Check In", icon: LogIn, onClick: () => navigate("/assets/checkin") },
     { label: "View Inventory", icon: Package, onClick: () => navigate("/assets/allassets") },
     { label: "Create Repair", icon: Wrench, onClick: () => navigate("/assets/repairs/create") },
     { label: "Purchase Orders", icon: FileText, onClick: () => navigate("/assets/purchase-orders") },
     { label: "Reports", icon: TrendingUp, onClick: () => navigate("/assets/reports") },
-    { label: "Tools", icon: Settings, onClick: () => navigate("/assets/tools") },
   ];
 
   return (
@@ -164,7 +165,7 @@ const ITAMDashboard = () => {
             <CardDescription>Common asset management tasks</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
               {quickActions.map((action) => (
                 <Button
                   key={action.label}
@@ -201,11 +202,11 @@ const ITAMDashboard = () => {
                     </div>
                     <span className={`text-xs px-2 py-1 rounded-full ${
                       asset.status === "available" ? "bg-green-100 text-green-800" :
-                      asset.status === "assigned" ? "bg-blue-100 text-blue-800" :
-                      asset.status === "in_repair" ? "bg-yellow-100 text-yellow-800" :
+                      asset.status === "in_use" ? "bg-blue-100 text-blue-800" :
+                      asset.status === "maintenance" ? "bg-yellow-100 text-yellow-800" :
                       "bg-gray-100 text-gray-800"
                     }`}>
-                      {asset.status}
+                      {asset.status === "in_use" ? "Checked Out" : asset.status}
                     </span>
                   </div>
                 ))}

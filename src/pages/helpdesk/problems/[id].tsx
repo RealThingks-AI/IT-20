@@ -154,7 +154,7 @@ export default function HelpdeskProblemDetail() {
     onSuccess: () => {
       toast.success("Problem deleted successfully");
       queryClient.invalidateQueries({ queryKey: ["helpdesk-problems"] });
-      navigate("/helpdesk/problems");
+      navigate("/problems");
     },
     onError: (error: Error) => {
       toast.error("Failed to delete problem: " + error.message);
@@ -218,7 +218,7 @@ export default function HelpdeskProblemDetail() {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => navigate("/helpdesk/problems")}>
+          <Button variant="outline" size="sm" onClick={() => navigate("/problems")}>
             All Problems
           </Button>
           <Button variant="outline" size="sm" onClick={() => setIsEditDialogOpen(true)}>
