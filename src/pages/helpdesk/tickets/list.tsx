@@ -1,26 +1,23 @@
 import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, GitMerge } from "lucide-react";
+import { Search, GitMerge } from "lucide-react";
 import { toast } from "sonner";
 import { TicketModuleTopBar } from "@/components/helpdesk/tickets/TicketModuleTopBar";
 import { TicketTableView } from "@/components/helpdesk/TicketTableView";
-import { TicketCardView } from "@/components/helpdesk/TicketCardView";
 import { TicketPagination } from "@/components/helpdesk/TicketPagination";
-import { ViewToggle } from "@/components/helpdesk/ViewToggle";
-import { ColumnVisibilityToggle, type ColumnConfig } from "@/components/helpdesk/ColumnVisibilityToggle";
-import { SavedViewsManager } from "@/components/helpdesk/SavedViewsManager";
 import { BulkActionsButton } from "@/components/helpdesk/BulkActionsButton";
 import { MergeTicketsDialog } from "@/components/helpdesk/MergeTicketsDialog";
 import { EditTicketDialog } from "@/components/helpdesk/EditTicketDialog";
 import { AssignTicketDialog } from "@/components/helpdesk/AssignTicketDialog";
 import { CreateTicketDialog } from "@/components/helpdesk/CreateTicketDialog";
 import { useUnifiedRequests } from "@/hooks/useUnifiedRequests";
-import { defaultTicketColumns, isSLABreached } from "@/lib/ticketUtils";
+import { isSLABreached } from "@/lib/ticketUtils";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Button } from "@/components/ui/button";
 
 export default function TicketsList() {
   const navigate = useNavigate();
@@ -40,8 +37,6 @@ export default function TicketsList() {
   const [filters, setFilters] = useState<Record<string, any>>(initialFilters);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const [viewMode, setViewMode] = useState<"table" | "card">("table");
-  const [columns, setColumns] = useState<ColumnConfig[]>(defaultTicketColumns);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
   const [createTicketOpen, setCreateTicketOpen] = useState(false);
@@ -113,57 +108,52 @@ export default function TicketsList() {
     setSelectedIds(checked ? pageTickets.map((t: any) => t.id) : []);
   };
 
-  const handleApplySavedView = (savedFilters: Record<string, any>) => {
-    setFilters(savedFilters);
-  };
-
-  const handleSearch = (query: string, filter: string) => {
-    setFilters({ ...filters, search: query });
-  };
-
-  const visibleColumns = columns.filter(c => c.visible).map(c => c.id);
-
   // Paginated data
   const paginatedRequests = requests.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   return (
     <div className="h-full flex flex-col bg-background">
       <TicketModuleTopBar 
-        onSearch={handleSearch}
         exportData={requests}
         exportFilename="tickets-export"
       >
-        {/* Filter controls in middle */}
+        {/* Filter controls */}
         <div className="flex items-center gap-2 flex-1">
-          <div className="relative w-[200px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          {/* Type Toggle */}
+          <ToggleGroup 
+            type="single" 
+            value={filters.requestType || 'all'} 
+            onValueChange={(value) => {
+              if (value) setFilters({ ...filters, requestType: value === 'all' ? null : value });
+            }}
+            className="h-7"
+          >
+            <ToggleGroupItem value="all" className="h-7 px-2.5 text-xs data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
+              All
+            </ToggleGroupItem>
+            <ToggleGroupItem value="ticket" className="h-7 px-2.5 text-xs data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
+              Tickets
+            </ToggleGroupItem>
+            <ToggleGroupItem value="service_request" className="h-7 px-2.5 text-xs data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
+              Requests
+            </ToggleGroupItem>
+          </ToggleGroup>
+
+          <div className="relative w-[180px]">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
             <Input 
-              placeholder="Quick search..." 
+              placeholder="Search..." 
               value={filters.search || ''} 
               onChange={e => setFilters({ ...filters, search: e.target.value })} 
-              className="pl-9 h-7 text-xs" 
+              className="pl-8 h-7 text-xs" 
             />
           </div>
-
-          <Select 
-            value={filters.requestType || 'all'} 
-            onValueChange={value => setFilters({ ...filters, requestType: value === 'all' ? null : value })}
-          >
-            <SelectTrigger className="w-[120px] h-7 text-xs">
-              <SelectValue placeholder="Type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              <SelectItem value="ticket">Tickets</SelectItem>
-              <SelectItem value="service_request">Requests</SelectItem>
-            </SelectContent>
-          </Select>
 
           <Select 
             value={filters.status || 'all'} 
             onValueChange={value => setFilters({ ...filters, status: value === 'all' ? null : value })}
           >
-            <SelectTrigger className="w-[100px] h-7 text-xs">
+            <SelectTrigger className="w-[90px] h-7 text-xs">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
@@ -180,7 +170,7 @@ export default function TicketsList() {
             value={filters.priority || 'all'} 
             onValueChange={value => setFilters({ ...filters, priority: value === 'all' ? null : value })}
           >
-            <SelectTrigger className="w-[100px] h-7 text-xs">
+            <SelectTrigger className="w-[90px] h-7 text-xs">
               <SelectValue placeholder="Priority" />
             </SelectTrigger>
             <SelectContent>
@@ -191,10 +181,6 @@ export default function TicketsList() {
               <SelectItem value="low">Low</SelectItem>
             </SelectContent>
           </Select>
-
-          <ViewToggle view={viewMode} onViewChange={setViewMode} />
-          <ColumnVisibilityToggle columns={columns} onColumnsChange={setColumns} />
-          <SavedViewsManager currentFilters={filters} onApplyView={handleApplySavedView} />
           
           <BulkActionsButton 
             selectedIds={selectedIds} 
@@ -221,21 +207,12 @@ export default function TicketsList() {
           <div className="flex items-center justify-center h-full">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
           </div>
-        ) : viewMode === "table" ? (
+        ) : (
           <TicketTableView
             tickets={paginatedRequests}
             selectedIds={selectedIds}
             onSelectTicket={handleSelectTicket}
             onSelectAll={handleSelectAll}
-            onEditTicket={setEditTicket}
-            onAssignTicket={setAssignTicket}
-            onQuickStatusChange={handleQuickStatusChange}
-          />
-        ) : (
-          <TicketCardView
-            tickets={paginatedRequests}
-            selectedIds={selectedIds}
-            onSelectTicket={handleSelectTicket}
             onEditTicket={setEditTicket}
             onAssignTicket={setAssignTicket}
             onQuickStatusChange={handleQuickStatusChange}
