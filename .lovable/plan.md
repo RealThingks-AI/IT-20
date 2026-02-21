@@ -1,55 +1,74 @@
 
-# Fix Image Migration (Dedup) & Default Page Sizes
+# Fix Asset Column Settings + Compact List View
 
-## 1. Deduplicated Image Migration (Edge Function)
+## Root Cause Found
 
-The current `migrate-asset-photos/index.ts` downloads one image per asset, even if 20 assets share the same external URL. This wastes storage and time.
+The column settings ARE being saved to the database correctly, but they are never read back. The bug is on **line 138 of `src/hooks/useUISettings.tsx`**:
 
-### New Logic
-
-1. Fetch all assets with `assettiger.com` URLs
-2. Group them by `photo_url` -- e.g., if 20 assets share the same URL, that URL appears once in the processing queue
-3. For each unique URL:
-   - Download the image once
-   - Upload once to `asset-photos/migrated/{hash}.{ext}` (using a hash of the URL as filename)
-   - Get the public URL
-4. Update ALL assets that shared that original URL in a single batch update
-5. Store `original_photo_url` for reference
-
-This means instead of downloading 322 images, we might only download ~30-50 unique images.
-
-### File to Modify
-- `supabase/functions/migrate-asset-photos/index.ts`
-
-### Technical Approach
+```ts
+const uiSettingsData = data?.preferences?.[0]?.ui_settings;
 ```
-// Pseudocode
-1. SELECT id, custom_fields FROM itam_assets WHERE photo_url LIKE '%assettiger.com%'
-2. Build a Map<originalUrl, assetId[]>
-3. For each unique URL:
-   a. Fetch image once
-   b. Upload to asset-photos/migrated/{urlHash}.{ext}
-   c. Get public URL
-   d. UPDATE itam_assets SET custom_fields photo_url = newUrl WHERE id IN (all asset IDs with that URL)
-4. Return stats: uniqueImages, totalAssetsUpdated, failed
+
+The Supabase query returns `preferences` as a **single object** (not an array) because `user_preferences` has a unique constraint on `user_id`, making it a 1-to-1 relationship. So `preferences[0]` returns `undefined`, and the code always falls back to default column settings.
+
+**Evidence**: The network response confirms this:
+```json
+{"id":"...","preferences":{"ui_settings":{"assetColumns":[...]}}}
 ```
+
+Accessing `preferences[0]` on an object returns `undefined`.
 
 ---
 
-## 2. Default Page Size: 100, with options 100/200/500
+## Changes
 
-### File to Modify
-- `src/components/helpdesk/assets/AssetsList.tsx`
+### Fix 1: Read settings correctly (`src/hooks/useUISettings.tsx`)
 
-### Changes
-- Line 28: Change `PAGE_SIZE_OPTIONS` from `[25, 50, 100]` to `[100, 200, 500]`
-- Line 75: Change default `pageSize` from `25` to `100`
+**Line 138** - Change the data extraction to handle both object and array:
+
+```ts
+// Before (broken):
+const uiSettingsData = data?.preferences?.[0]?.ui_settings;
+
+// After (fixed):
+const prefs = data?.preferences;
+const uiSettingsData = Array.isArray(prefs)
+  ? prefs[0]?.ui_settings
+  : prefs?.ui_settings;
+```
+
+This single fix resolves the entire column settings issue - save, load, and real-time updates will all work.
+
+### Fix 2: Reduce list view font size, spacing, and padding (`src/components/helpdesk/assets/AssetsList.tsx`)
+
+- Table header text: add `text-xs` class
+- Table cell text: add `text-xs` class
+- Row height: reduce padding with `py-1` on cells
+- Status badge: reduce to `text-[10px] px-1.5 py-0`
+- Column min-widths: reduce by ~20% for tighter layout
+- Pagination text: already `text-xs`, keep as-is
+
+### Fix 3: Compact column settings dialog (`src/components/helpdesk/assets/AssetColumnSettings.tsx`)
+
+- Reduce checkbox row padding from `p-2` to `p-1.5`
+- Use `text-sm` for column labels (already used, keep)
+- Tighten ScrollArea height if needed
 
 ---
 
-## Summary of Changes
+## Technical Details
 
+### Why the mutation appeared to work
+The `updateAssetColumns` mutation correctly:
+1. Saves to `user_preferences.ui_settings` via upsert
+2. Invalidates the `["user-settings-combined"]` query cache
+3. The query refetches fresh data from the DB
+
+But on refetch, the same broken line 138 extracts `undefined` again, so the table never updates.
+
+### Files to modify
 | File | Change |
 |------|--------|
-| `supabase/functions/migrate-asset-photos/index.ts` | Deduplicate by URL before downloading; batch-update all assets sharing same image |
-| `src/components/helpdesk/assets/AssetsList.tsx` | Default page size 100, options 100/200/500 |
+| `src/hooks/useUISettings.tsx` | Fix line 138 - handle object vs array for preferences |
+| `src/components/helpdesk/assets/AssetsList.tsx` | Add `text-xs` to cells, reduce padding, compact rows |
+| `src/components/helpdesk/assets/AssetColumnSettings.tsx` | Minor spacing tightening |
