@@ -29,28 +29,28 @@ const PAGE_SIZE_OPTIONS = [100, 200, 500];
 
 // Column minimum widths for proper spacing
 const COLUMN_MIN_WIDTHS: Record<string, string> = {
-  asset_tag: "min-w-[100px]",
-  category: "min-w-[90px]",
-  status: "min-w-[90px]",
-  make: "min-w-[80px]",
-  model: "min-w-[80px]",
-  serial_number: "min-w-[100px]",
-  assigned_to: "min-w-[100px]",
-  asset_configuration: "min-w-[140px]",
-  description: "min-w-[150px]",
-  cost: "min-w-[90px]",
-  purchase_date: "min-w-[100px]",
-  purchased_from: "min-w-[100px]",
-  location: "min-w-[80px]",
-  site: "min-w-[60px]",
-  department: "min-w-[90px]",
-  asset_classification: "min-w-[120px]",
-  asset_photo: "min-w-[60px]",
-  event_date: "min-w-[100px]",
-  event_due_date: "min-w-[100px]",
-  event_notes: "min-w-[150px]",
-  created_by: "min-w-[100px]",
-  created_at: "min-w-[100px]",
+  asset_tag: "min-w-[80px]",
+  category: "min-w-[70px]",
+  status: "min-w-[70px]",
+  make: "min-w-[60px]",
+  model: "min-w-[60px]",
+  serial_number: "min-w-[80px]",
+  assigned_to: "min-w-[80px]",
+  asset_configuration: "min-w-[110px]",
+  description: "min-w-[120px]",
+  cost: "min-w-[70px]",
+  purchase_date: "min-w-[80px]",
+  purchased_from: "min-w-[80px]",
+  location: "min-w-[60px]",
+  site: "min-w-[50px]",
+  department: "min-w-[70px]",
+  asset_classification: "min-w-[100px]",
+  asset_photo: "min-w-[50px]",
+  event_date: "min-w-[80px]",
+  event_due_date: "min-w-[80px]",
+  event_notes: "min-w-[120px]",
+  created_by: "min-w-[80px]",
+  created_at: "min-w-[80px]",
 };
 
 // Status labels and badge classes mapping
@@ -421,7 +421,7 @@ export function AssetsList({
         const statusConfig = STATUS_CONFIG[asset.status];
         if (statusConfig) {
           return (
-            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusConfig.className}`}>
+            <span className={`px-1.5 py-0 rounded-full text-[10px] font-medium ${statusConfig.className}`}>
               {statusConfig.label}
             </span>
           );
@@ -449,7 +449,7 @@ export function AssetsList({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-10 whitespace-nowrap">
+              <TableHead className="w-8 whitespace-nowrap py-1">
                 <Checkbox
                   checked={selectedIds.length === assets.length && assets.length > 0}
                   onCheckedChange={handleSelectAll}
@@ -458,7 +458,7 @@ export function AssetsList({
               {activeColumns.map((column) => (
                 <TableHead
                   key={column.id}
-                  className={`whitespace-nowrap cursor-pointer select-none hover:bg-muted/50 ${
+                  className={`whitespace-nowrap cursor-pointer select-none hover:bg-muted/50 text-xs py-1 ${
                     COLUMN_MIN_WIDTHS[column.id] || ""
                   } ${column.id === "cost" ? "text-right" : ""}`}
                   onClick={() => handleSort(column.id)}
@@ -475,7 +475,7 @@ export function AssetsList({
                   </div>
                 </TableHead>
               ))}
-              <TableHead className="w-12 whitespace-nowrap">Actions</TableHead>
+              <TableHead className="w-10 whitespace-nowrap text-xs py-1">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -497,7 +497,7 @@ export function AssetsList({
                   }`}
                   onClick={() => navigate(`/assets/detail/${asset.id}`)}
                 >
-                  <TableCell onClick={(e) => e.stopPropagation()} className="whitespace-nowrap">
+                  <TableCell onClick={(e) => e.stopPropagation()} className="whitespace-nowrap py-1">
                     <Checkbox
                       checked={selectedIds.includes(asset.id)}
                       onCheckedChange={(checked) =>
@@ -508,14 +508,14 @@ export function AssetsList({
                   {activeColumns.map((column) => (
                     <TableCell
                       key={column.id}
-                      className={`whitespace-nowrap ${
+                      className={`whitespace-nowrap text-xs py-1 ${
                         COLUMN_MIN_WIDTHS[column.id] || ""
                       } ${column.id === "cost" ? "text-right" : ""}`}
                     >
                       {renderCell(asset, column.id)}
                     </TableCell>
                   ))}
-                  <TableCell onClick={(e) => e.stopPropagation()} className="whitespace-nowrap">
+                  <TableCell onClick={(e) => e.stopPropagation()} className="whitespace-nowrap py-1">
                     <AssetActionsMenu asset={asset} />
                   </TableCell>
                 </TableRow>
