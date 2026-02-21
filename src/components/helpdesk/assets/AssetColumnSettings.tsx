@@ -191,7 +191,7 @@ export function AssetColumnSettings({ open, onOpenChange, onColumnsChange }: Ass
                         {categoryColumns.map((column) => (
                           <div
                             key={column.id}
-                            className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 transition-colors"
+                            className="flex items-center gap-3 p-1.5 rounded-md hover:bg-muted/50 transition-colors"
                           >
                             <Checkbox
                               id={`col-${column.id}`}

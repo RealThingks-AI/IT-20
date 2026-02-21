@@ -135,7 +135,10 @@ export function useUISettings() {
       if (error) throw error;
 
       // Extract the UI settings from the joined result
-      const uiSettingsData = data?.preferences?.[0]?.ui_settings;
+      const prefs = data?.preferences;
+      const uiSettingsData = Array.isArray(prefs)
+        ? prefs[0]?.ui_settings
+        : prefs?.ui_settings;
       
       return {
         userId: data?.id || null,
