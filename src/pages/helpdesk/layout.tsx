@@ -35,7 +35,7 @@ const routeTitles: Record<string, string> = {
   "/assets/reports": "Asset Reports",
   "/assets/audit": "Asset Audit",
   "/assets/explore/bulk-actions": "Bulk Actions",
-  "/assets/explore/reports": "Asset Reports",
+  
   "/assets/repairs": "Repairs & Maintenance",
   "/assets/repairs/create": "Create Repair",
   "/assets/licenses": "Software Licenses",

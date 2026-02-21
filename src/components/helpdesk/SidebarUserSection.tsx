@@ -1,10 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { useSessionStore } from "@/stores/useSessionStore";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,7 +16,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ChevronUp, Settings, LogOut, User } from "lucide-react";
+import { ChevronUp, LogOut, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface SidebarUserSectionProps {
@@ -30,25 +28,9 @@ export function SidebarUserSection({ collapsed }: SidebarUserSectionProps) {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
 
-  const { data: userProfile } = useQuery({
-    queryKey: ["sidebar-user-profile", user?.id],
-    queryFn: async () => {
-      if (!user?.id) return null;
-      const { data } = await supabase
-        .from("users")
-        .select("id, name, email, role")
-        .eq("auth_user_id", user.id)
-        .maybeSingle();
-      return data;
-    },
-    enabled: !!user?.id,
-    staleTime: 10 * 60 * 1000, // 10 minutes - profile rarely changes
-    gcTime: 15 * 60 * 1000, // 15 minutes cache
-  });
-
-  const userName = userProfile?.name || user?.email?.split("@")[0] || "User";
-  const userRole = userProfile?.role || "User";
-  const userEmail = userProfile?.email || user?.email || "";
+  // Read from session store — no DB query
+  const storeName = useSessionStore((s) => s.name);
+  const userName = storeName || user?.user_metadata?.name || user?.email?.split("@")[0] || "User";
 
   const getInitials = (name: string) => {
     return name

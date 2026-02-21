@@ -25,7 +25,12 @@ import {
 } from "lucide-react";
 import { ASSET_STATUS, canCheckIn, canCheckOut } from "@/lib/assetStatusUtils";
 import { CheckOutDialog } from "./CheckOutDialog";
+import { CheckInDialog } from "./CheckInDialog";
+import { RepairAssetDialog } from "./RepairAssetDialog";
+import { MarkAsLostDialog } from "./MarkAsLostDialog";
+import { ReplicateAssetDialog } from "./ReplicateAssetDialog";
 import { EmailAssetDialog } from "./EmailAssetDialog";
+import { DisposeAssetDialog } from "./DisposeAssetDialog";
 
 interface AssetActionsMenuProps {
   asset: {
@@ -44,12 +49,24 @@ export function AssetActionsMenu({ asset, onActionComplete }: AssetActionsMenuPr
   const queryClient = useQueryClient();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [checkOutDialogOpen, setCheckOutDialogOpen] = useState(false);
+  const [checkInDialogOpen, setCheckInDialogOpen] = useState(false);
+  const [repairDialogOpen, setRepairDialogOpen] = useState(false);
+  const [lostDialogOpen, setLostDialogOpen] = useState(false);
+  const [replicateDialogOpen, setReplicateDialogOpen] = useState(false);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [disposeDialogOpen, setDisposeDialogOpen] = useState(false);
 
   const invalidateQueries = () => {
     queryClient.invalidateQueries({ queryKey: ["helpdesk-assets"] });
     queryClient.invalidateQueries({ queryKey: ["helpdesk-assets-count"] });
     queryClient.invalidateQueries({ queryKey: ["itam-asset-detail"] });
+    queryClient.invalidateQueries({ queryKey: ["itam-assets-dashboard-full"] });
+    queryClient.invalidateQueries({ queryKey: ["itam-recent-checkins"] });
+    queryClient.invalidateQueries({ queryKey: ["itam-recent-checkouts"] });
+    queryClient.invalidateQueries({ queryKey: ["employee-asset-counts"] });
+    queryClient.invalidateQueries({ queryKey: ["employee-assets"] });
+    queryClient.invalidateQueries({ queryKey: ["asset-history"] });
+    queryClient.invalidateQueries({ queryKey: ["asset-events"] });
     onActionComplete?.();
   };
 
@@ -168,19 +185,19 @@ export function AssetActionsMenu({ asset, onActionComplete }: AssetActionsMenuPr
   });
 
   const handleCheckIn = () => {
-    updateStatus.mutate({ status: ASSET_STATUS.AVAILABLE, clearAssignment: true });
+    setCheckInDialogOpen(true);
   };
 
   const handleMaintenance = () => {
-    updateStatus.mutate({ status: ASSET_STATUS.MAINTENANCE });
+    setRepairDialogOpen(true);
   };
 
   const handleLost = () => {
-    updateStatus.mutate({ status: ASSET_STATUS.LOST });
+    setLostDialogOpen(true);
   };
 
   const handleDispose = () => {
-    navigate(`/assets/dispose?assetId=${asset.id}`);
+    setDisposeDialogOpen(true);
   };
 
   const handleDelete = () => {
@@ -188,7 +205,7 @@ export function AssetActionsMenu({ asset, onActionComplete }: AssetActionsMenuPr
   };
 
   const handleReplicate = () => {
-    replicateAsset.mutate();
+    setReplicateDialogOpen(true);
   };
 
   const isLoading = updateStatus.isPending || deleteAsset.isPending || replicateAsset.isPending;
@@ -262,10 +279,50 @@ export function AssetActionsMenu({ asset, onActionComplete }: AssetActionsMenuPr
         onSuccess={invalidateQueries}
       />
 
+      <CheckInDialog
+        open={checkInDialogOpen}
+        onOpenChange={setCheckInDialogOpen}
+        assetId={asset.id}
+        assetName={asset.asset_tag || asset.name || 'Asset'}
+        onSuccess={invalidateQueries}
+      />
+
+      <RepairAssetDialog
+        open={repairDialogOpen}
+        onOpenChange={setRepairDialogOpen}
+        assetId={asset.id}
+        assetName={asset.asset_tag || asset.name || 'Asset'}
+        onSuccess={invalidateQueries}
+      />
+
+      <MarkAsLostDialog
+        open={lostDialogOpen}
+        onOpenChange={setLostDialogOpen}
+        assetId={asset.id}
+        assetName={asset.asset_tag || asset.name || 'Asset'}
+        onSuccess={invalidateQueries}
+      />
+
+      <ReplicateAssetDialog
+        open={replicateDialogOpen}
+        onOpenChange={setReplicateDialogOpen}
+        assetId={asset.id}
+        assetName={asset.asset_tag || asset.name || 'Asset'}
+        onSuccess={invalidateQueries}
+      />
+
       <EmailAssetDialog
         open={emailDialogOpen}
         onOpenChange={setEmailDialogOpen}
         asset={asset}
+      />
+
+      <DisposeAssetDialog
+        open={disposeDialogOpen}
+        onOpenChange={setDisposeDialogOpen}
+        assetId={asset.id}
+        assetName={asset.asset_tag || asset.name || 'Asset'}
+        onSuccess={invalidateQueries}
       />
     </>
   );

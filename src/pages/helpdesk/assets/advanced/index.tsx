@@ -102,14 +102,15 @@ export default function AdvancedPage() {
   // Fetch users/employees using the simplified hook
   const { data: employees = [], isLoading: loadingEmployees } = useOrganisationUsers();
 
-  // Fetch asset counts for employees
+  // Fetch asset counts for employees - query from itam_assets directly for accuracy
   const { data: assetCounts = {} } = useQuery({
     queryKey: ["employee-asset-counts"],
     queryFn: async () => {
       const { data } = await supabase
-        .from("itam_asset_assignments")
+        .from("itam_assets")
         .select("assigned_to")
-        .is("returned_at", null);
+        .eq("is_active", true)
+        .not("assigned_to", "is", null);
       
       const counts: Record<string, number> = {};
       data?.forEach((a) => {
@@ -280,18 +281,11 @@ export default function AdvancedPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      const { data: userData } = await supabase
-        .from("users")
-        .select("organisation_id")
-        .eq("auth_user_id", user.id)
-        .single();
-
       const tableName = getTableName(dialogType);
       
       if (dialogMode === "add") {
         const insertData: Record<string, unknown> = {
           name: inputValue.trim(),
-          organisation_id: userData?.organisation_id,
         };
         
         if (dialogType === "location" && selectedSiteId) {

@@ -80,7 +80,7 @@ const TABLE_DISPLAY_NAMES: Record<string, string> = {
   helpdesk_changes: "Changes",
   audit_logs: "Audit Logs",
   user_roles: "User Roles",
-  organisations: "Organizations",
+  tenants: "Tenants",
 };
 
 export function AdminSystem() {
@@ -121,14 +121,14 @@ export function AdminSystem() {
         "helpdesk_changes",
         "audit_logs",
         "user_roles",
-        "organisations",
+        "tenants",
       ];
 
       const stats: TableStats[] = [];
       for (const table of tables) {
         try {
           const { count, error } = await supabase
-            .from(table as "users")
+            .from(table as any)
             .select("*", { count: "exact", head: true });
           if (!error) {
             stats.push({ table_name: table, row_count: count || 0 });
@@ -213,23 +213,27 @@ export function AdminSystem() {
 
   const updateSettings = useMutation({
     mutationFn: async (data: OrgSettings) => {
-      if (!organisation?.id) throw new Error("Organisation not found");
-      const { error } = await supabase
-        .from("organisations")
-        .update({
-          name: data.name,
-          settings: {
-            timezone: data.timezone,
-            workingHoursStart: data.workingHoursStart,
-            workingHoursEnd: data.workingHoursEnd,
-            workingDays: data.workingDays,
-          },
-        })
-        .eq("id", organisation.id);
-      if (error) throw error;
+      // In single-company mode, save to itam_company_info instead
+      const { data: existing } = await supabase
+        .from("itam_company_info")
+        .select("id")
+        .maybeSingle();
+      
+      if (existing?.id) {
+        const { error } = await supabase
+          .from("itam_company_info")
+          .update({ company_name: data.name })
+          .eq("id", existing.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("itam_company_info")
+          .insert({ company_name: data.name });
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["organisation"] });
+      queryClient.invalidateQueries({ queryKey: ["itam-company-info"] });
       toast.success("System settings updated");
     },
     onError: (error: Error) => {

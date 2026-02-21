@@ -90,20 +90,18 @@ export default function HelpdeskProblemDetail() {
     enabled: !!id,
   });
 
+  // Single-company mode: fetch all non-deleted tickets
   const { data: availableTickets = [] } = useQuery({
-    queryKey: ["helpdesk-tickets-for-link", problem?.organisation_id],
+    queryKey: ["helpdesk-tickets-for-link"],
     queryFn: async () => {
-      if (!problem?.organisation_id) return [];
       const { data, error } = await supabase
         .from("helpdesk_tickets")
         .select("id, ticket_number, title, status, priority")
-        .eq("organisation_id", problem.organisation_id)
         .eq("is_deleted", false)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data || [];
     },
-    enabled: !!problem?.organisation_id,
   });
 
   const linkTicket = useMutation({

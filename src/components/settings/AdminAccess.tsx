@@ -48,19 +48,15 @@ const ALWAYS_ALLOWED_ROUTES = ["/account", "/notifications", "/profile"];
 
 export function AdminAccess() {
   const { data: currentUser, isLoading: userLoading } = useCurrentUser();
-  const organisationId = currentUser?.organisationId;
   const queryClient = useQueryClient();
   const [isSeeding, setIsSeeding] = useState(false);
 
   const { data: pages, isLoading, error, refetch } = useQuery({
-    queryKey: ["page-access-control", organisationId],
+    queryKey: ["page-access-control"],
     queryFn: async () => {
-      if (!organisationId) return [];
-      
       const { data, error } = await supabase
         .from("page_access_control")
         .select("*")
-        .eq("organisation_id", organisationId)
         .order("page_name");
       
       if (error) throw error;
@@ -69,12 +65,11 @@ export function AdminAccess() {
       const mainRoutes = DEFAULT_PAGES.map(p => p.route);
       return (data as PageAccess[]).filter(p => mainRoutes.includes(p.route));
     },
-    enabled: !!organisationId,
   });
 
   // Auto-seed defaults if table is empty or missing pages
   useEffect(() => {
-    if (pages !== undefined && organisationId && !isSeeding) {
+    if (pages !== undefined && !isSeeding) {
       const existingRoutes = pages.map(p => p.route);
       const missingPages = DEFAULT_PAGES.filter(p => !existingRoutes.includes(p.route));
       
@@ -82,21 +77,20 @@ export function AdminAccess() {
         seedDefaultPages(missingPages);
       }
     }
-  }, [pages, organisationId, isSeeding]);
+  }, [pages, isSeeding]);
 
   const seedDefaultPages = async (pagesToAdd: typeof DEFAULT_PAGES) => {
-    if (!organisationId || isSeeding) return;
+    if (isSeeding) return;
     
     setIsSeeding(true);
     try {
       const pagesToInsert = pagesToAdd.map((page) => ({
-        organisation_id: organisationId,
         ...page,
       }));
 
       const { error } = await supabase
         .from("page_access_control")
-        .insert(pagesToInsert);
+        .insert(pagesToInsert as any);
 
       if (error) {
         console.error("Error seeding default pages:", error);
@@ -159,21 +153,6 @@ export function AdminAccess() {
 
   if (userLoading) {
     return <SettingsLoadingSkeleton cards={1} rows={8} />;
-  }
-
-  if (!organisationId) {
-    return (
-      <div className="space-y-4">
-        <div>
-          <h2 className="text-base font-semibold">Page Access Control</h2>
-          <p className="text-xs text-muted-foreground">Configure role-based page access</p>
-        </div>
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>Unable to load organisation data.</AlertDescription>
-        </Alert>
-      </div>
-    );
   }
 
   if (isLoading || isSeeding) {

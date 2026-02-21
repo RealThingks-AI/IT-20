@@ -13,7 +13,8 @@ import {
   FileText,
   TrendingUp,
   LogOut,
-  LogIn
+  LogIn,
+  Calendar
 } from "lucide-react";
 import { BackButton } from "@/components/BackButton";
 
@@ -75,6 +76,15 @@ const ITAMDashboard = () => {
     return warrantyDate <= thirtyDaysFromNow && warrantyDate >= new Date();
   }).length;
 
+  // Lease expiring soon (30 days) - stored in custom_fields
+  const expiringLease = assets.filter(a => {
+    const customFields = a.custom_fields as Record<string, any> | null;
+    const leaseExpiry = customFields?.lease_expiry;
+    if (!leaseExpiry) return false;
+    const leaseDate = new Date(leaseExpiry);
+    return leaseDate <= thirtyDaysFromNow && leaseDate >= new Date();
+  }).length;
+
   const stats = [
     {
       title: "Total Assets",
@@ -103,6 +113,13 @@ const ITAMDashboard = () => {
       icon: AlertTriangle,
       description: "Within 30 days",
       onClick: () => navigate("/assets/allassets?warranty=expiring"),
+    },
+    {
+      title: "Lease Expiring",
+      value: expiringLease,
+      icon: Calendar,
+      description: "Within 30 days",
+      onClick: () => navigate("/assets/allassets?lease=expiring"),
     },
     {
       title: "License Utilization",
@@ -139,7 +156,7 @@ const ITAMDashboard = () => {
         </div>
 
         {/* KPI Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
           {stats.map((stat) => (
             <Card 
               key={stat.title} 

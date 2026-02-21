@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { ReportCard } from "@/components/helpdesk/assets/reports/ReportCard";
 import { useAssetReportsData } from "@/hooks/useAssetReportsData";
-import { Loader2, Package, ClipboardCheck, LogOut, Receipt, Wrench, Activity, FileText, Image, MapPin, Building2, Key, Calendar, Users, Trash2, Edit, Plus, ArrowRightLeft, AlertTriangle, Clock, Shield, TrendingDown, Archive, Gift, DollarSign, Truck, Search } from "lucide-react";
+import { Loader2, Package, ClipboardCheck, LogOut, Receipt, Wrench, Activity, FileText, Image, MapPin, Building2, Key, Calendar, Users, Trash2, Edit, Plus, ArrowRightLeft, AlertTriangle, Clock, Shield, Archive, Gift, DollarSign, Truck, Search } from "lucide-react";
 import * as generators from "@/lib/assetReportGenerators";
 
 const AssetReports = () => {
@@ -42,11 +42,8 @@ const AssetReports = () => {
         reports: [
           { id: "audit-by-tag", title: "By Asset Tag", description: "Audit history for specific assets", icon: Package, count: data.assetHistory.filter(h => h.action === "audit").length, action: () => generators.generateAuditByAssetTagReport(data) },
           { id: "audit-by-date", title: "By Audit Date", description: "Audit records by date range", icon: Calendar, count: data.assetHistory.filter(h => h.action === "audit").length, action: () => generators.generateAuditByDateReport(data) },
-          { id: "audit-by-site", title: "By Site/Location", description: "Audits grouped by location", icon: MapPin, count: data.assetHistory.filter(h => h.action === "audit").length, action: () => generators.generateAuditByDateReport(data) },
+          { id: "audit-by-site", title: "By Site/Location", description: "Audits grouped by location", icon: MapPin, count: data.assetHistory.filter(h => h.action === "audit").length, action: () => generators.generateAuditBySiteReport(data) },
           { id: "non-audited", title: "Non-Audited Assets", description: "Assets missing audit records", icon: AlertTriangle, count: data.assets.length, action: () => generators.generateNonAuditedAssetsReport(data) },
-          { id: "location-discrepancy", title: "Location Discrepancy", description: "Assets with location mismatches", icon: Search, count: 0, action: () => {} },
-          { id: "audit-by-funding", title: "By Funding", description: "Assets by funding source", icon: DollarSign, count: 0, action: () => {} },
-          { id: "non-audited-funding", title: "Non-Audited Funding", description: "Funding sources not audited", icon: AlertTriangle, count: 0, action: () => {} },
         ]
       },
       {
@@ -58,7 +55,7 @@ const AssetReports = () => {
           { id: "checkout-by-tag", title: "By Asset Tag", description: "Check-out history by asset", icon: Package, count: data.assignments.length, action: () => generators.generateCheckoutByAssetReport(data) },
           { id: "checkout-by-due", title: "By Due Date", description: "Assets with upcoming return dates", icon: Calendar, count: 0, action: () => generators.generateCheckoutByDueDateReport(data) },
           { id: "checkout-past-due", title: "By Past Due", description: "Overdue assignments", icon: Clock, count: 0, action: () => generators.generateCheckoutPastDueReport(data) },
-          { id: "checkout-by-site", title: "By Site/Location", description: "Check-outs by location", icon: MapPin, count: data.assignments.filter(a => !a.returned_at).length, action: () => generators.generateCheckoutByPersonReport(data) },
+          { id: "checkout-by-site", title: "By Site/Location", description: "Check-outs by location", icon: MapPin, count: data.assignments.filter(a => !a.returned_at).length, action: () => generators.generateCheckoutBySiteReport(data) },
           { id: "checkout-timeframe", title: "In a Time Frame", description: "Check-outs within date range", icon: Calendar, count: data.assignments.length, action: () => generators.generateCheckoutByAssetReport(data) },
         ]
       },
@@ -78,9 +75,9 @@ const AssetReports = () => {
         icon: Wrench,
         reports: [
           { id: "maint-by-tag", title: "By Asset Tag", description: "Maintenance by asset", icon: Package, count: data.maintenanceSchedules.length + data.repairs.length, action: () => generators.generateMaintenanceByAssetReport(data) },
-          { id: "maint-by-person", title: "By Assigned Person", description: "Maintenance by technician", icon: Users, count: data.maintenanceSchedules.length, action: () => generators.generateMaintenanceByAssetReport(data) },
+          { id: "maint-by-person", title: "By Assigned Person", description: "Maintenance by technician", icon: Users, count: data.maintenanceSchedules.length, action: () => generators.generateMaintenanceByPersonReport(data) },
           { id: "maint-history-tag", title: "History by Asset Tag", description: "Complete maintenance history", icon: FileText, count: data.maintenanceSchedules.length + data.repairs.length, action: () => generators.generateMaintenanceByAssetReport(data) },
-          { id: "maint-history-date", title: "History by Date", description: "Maintenance timeline", icon: Calendar, count: data.maintenanceSchedules.length + data.repairs.length, action: () => generators.generateMaintenanceByAssetReport(data) },
+          { id: "maint-history-date", title: "History by Date", description: "Maintenance timeline", icon: Calendar, count: data.maintenanceSchedules.length + data.repairs.length, action: () => generators.generateMaintenanceHistoryByDateReport(data) },
           { id: "maint-past-due", title: "Past Due", description: "Overdue maintenance tasks", icon: Clock, count: data.maintenanceSchedules.filter(m => m.next_due_date && new Date(m.next_due_date) < new Date()).length, action: () => generators.generateMaintenancePastDueReport(data) },
         ]
       },

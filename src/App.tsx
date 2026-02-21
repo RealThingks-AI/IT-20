@@ -23,9 +23,9 @@ const PageLoader = () => (
   </div>
 );
 
-// Lazy loaded components - Main Layout
-const HelpdeskLayout = lazy(() => import("./pages/helpdesk/layout"));
-const HelpdeskDashboard = lazy(() => import("./pages/helpdesk/dashboard"));
+// Eagerly loaded - critical path (dashboard is the landing page)
+import HelpdeskLayout from "./pages/helpdesk/layout";
+import HelpdeskDashboard from "./pages/helpdesk/dashboard";
 
 // Lazy loaded - Tickets
 const TicketsDashboard = lazy(() => import("./pages/helpdesk/tickets/dashboard"));
@@ -69,7 +69,7 @@ const CreateRepair = lazy(() => import("./pages/helpdesk/assets/repairs/create")
 const RepairDetail = lazy(() => import("./pages/helpdesk/assets/repairs/detail/[repairId]"));
 const AssetAudit = lazy(() => import("./pages/helpdesk/assets/audit/index"));
 const AssetsBulkActions = lazy(() => import("./pages/helpdesk/assets/explore/bulk-actions"));
-const AssetsReports = lazy(() => import("./pages/helpdesk/assets/explore/reports"));
+
 const AssetsImportExport = lazy(() => import("./pages/helpdesk/assets/import-export"));
 const PurchaseOrdersList = lazy(() => import("./pages/helpdesk/assets/purchase-orders/index"));
 const CreatePO = lazy(() => import("./pages/helpdesk/assets/purchase-orders/create-po"));
@@ -200,7 +200,7 @@ const App = () => {
                       <Route path="assets/audit" element={<AssetAudit />} />
                       <Route path="assets/setup/fields-setup" element={<Navigate to="/assets/advanced?tab=setup" replace />} />
                       <Route path="assets/explore/bulk-actions" element={<AssetsBulkActions />} />
-                      <Route path="assets/explore/reports" element={<RoleProtectedRoute allowedRoles={["admin", "manager"]}><AssetsReports /></RoleProtectedRoute>} />
+                      
                       
                       {/* Subscription - Database-driven access control */}
                       <Route path="subscription" element={<PageProtectedRoute route="/subscription"><HelpdeskSubscriptionLayout /></PageProtectedRoute>}>
@@ -219,8 +219,8 @@ const App = () => {
                       
                       {/* Other Modules - Database-driven access control */}
                       <Route path="monitoring" element={<PageProtectedRoute route="/monitoring"><HelpdeskMonitoring /></PageProtectedRoute>} />
-                      <Route path="reports" element={<PageProtectedRoute route="/reports"><HelpdeskReports /></PageProtectedRoute>} />
-                      <Route path="audit" element={<PageProtectedRoute route="/audit"><HelpdeskAudit /></PageProtectedRoute>} />
+                      <Route path="reports" element={<Navigate to="/settings?section=reports" replace />} />
+                      <Route path="audit" element={<Navigate to="/settings?section=audit" replace />} />
                       <Route path="changes" element={<HelpdeskChanges />} />
                       
                       {/* Admin-only routes (keep hardcoded for security) */}

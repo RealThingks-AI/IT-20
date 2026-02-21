@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, useQueries } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -25,7 +25,7 @@ interface AssetsListProps {
 type SortDirection = "asc" | "desc" | null;
 type SortColumn = string | null;
 
-const PAGE_SIZE_OPTIONS = [25, 50, 100];
+const PAGE_SIZE_OPTIONS = [100, 200, 500];
 
 // Column minimum widths for proper spacing
 const COLUMN_MIN_WIDTHS: Record<string, string> = {
@@ -72,7 +72,7 @@ export function AssetsList({
   const queryClient = useQueryClient();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [pageSize, setPageSize] = useState(100);
   const [sortColumn, setSortColumn] = useState<SortColumn>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
   
@@ -204,6 +204,29 @@ export function AssetsList({
     staleTime: 30000,
   });
 
+  // Fetch users for assigned_to lookup
+  const { data: usersData = [] } = useQuery({
+    queryKey: ["users-for-assets-list"],
+    queryFn: async () => {
+      const { data } = await supabase.from("users").select("id, name, email");
+      return data || [];
+    },
+    staleTime: 60000,
+  });
+
+  // Helper to get user name by ID or return original value if not a UUID
+  const getUserName = (assignedTo: string | null) => {
+    if (!assignedTo) return null;
+    // Check if it looks like a UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (uuidRegex.test(assignedTo)) {
+      const user = usersData.find((u) => u.id === assignedTo);
+      return user?.name || user?.email || assignedTo;
+    }
+    // Return as-is if it's already a name
+    return assignedTo;
+  };
+
   // Notify parent when data changes (for export)
   useEffect(() => {
     if (onDataLoad && assets.length > 0) {
@@ -245,10 +268,18 @@ export function AssetsList({
     },
   });
 
+  const createBulkActions = (ids: string[]) => ({
+    handleCheckOut: () => updateStatus.mutate({ ids, status: ASSET_STATUS.IN_USE }),
+    handleCheckIn: () => updateStatus.mutate({ ids, status: ASSET_STATUS.AVAILABLE }),
+    handleMaintenance: () => updateStatus.mutate({ ids, status: ASSET_STATUS.MAINTENANCE }),
+    handleDispose: () => updateStatus.mutate({ ids, status: ASSET_STATUS.DISPOSED }),
+    handleDelete: () => deleteAssets.mutate(ids),
+  });
+
   const handleSelectAll = (checked: boolean) => {
     const newSelected = checked ? assets.map((a: any) => a.id) : [];
     setSelectedIds(newSelected);
-    onSelectionChange?.(newSelected, bulkActions);
+    onSelectionChange?.(newSelected, createBulkActions(newSelected));
   };
 
   const handleSelectOne = (id: string, checked: boolean) => {
@@ -256,15 +287,7 @@ export function AssetsList({
       ? [...selectedIds, id]
       : selectedIds.filter((sid) => sid !== id);
     setSelectedIds(newSelected);
-    onSelectionChange?.(newSelected, bulkActions);
-  };
-
-  const bulkActions = {
-    handleCheckOut: () => updateStatus.mutate({ ids: selectedIds, status: ASSET_STATUS.IN_USE }),
-    handleCheckIn: () => updateStatus.mutate({ ids: selectedIds, status: ASSET_STATUS.AVAILABLE }),
-    handleMaintenance: () => updateStatus.mutate({ ids: selectedIds, status: ASSET_STATUS.MAINTENANCE }),
-    handleDispose: () => updateStatus.mutate({ ids: selectedIds, status: ASSET_STATUS.DISPOSED }),
-    handleDelete: () => deleteAssets.mutate(selectedIds),
+    onSelectionChange?.(newSelected, createBulkActions(newSelected));
   };
 
   const handleSort = (column: string) => {
@@ -382,8 +405,8 @@ export function AssetsList({
         return asset.location?.site?.name || "—";
 
       case "assigned_to":
-        // Display raw assigned_to ID or "Unassigned"
-        return asset.assigned_to || "—";
+        // Look up user name if it's a UUID, otherwise display as-is
+        return getUserName(asset.assigned_to) || "—";
 
       case "event_date":
         return formatDate(asset.checked_out_at);

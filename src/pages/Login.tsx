@@ -1,17 +1,19 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { AUTH_CONFIG } from "@/config/auth";
+import { useSessionStore } from "@/stores/useSessionStore";
 import appLogo from "@/assets/app-logo.png";
 
 const Login = () => {
   const queryClient = useQueryClient();
+  const bootstrap = useSessionStore((s) => s.bootstrap);
   const [isSignup, setIsSignup] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -64,52 +66,35 @@ const Login = () => {
         throw error;
       }
 
-      // Clear stale permission cache to prevent false denials
-      localStorage.removeItem('page-permissions-cache');
+      // Reset stale state then bootstrap fresh
+      useSessionStore.getState().clear();
+      await bootstrap();
 
-      // Prefetch critical data after successful login for faster initial load
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (authUser) {
-        // Prefetch user role and page permissions in parallel
-        const parentRoutes = ['/', '/tickets', '/assets', '/subscription', '/system-updates', '/monitoring', '/reports', '/audit', '/settings'];
-        
-        await Promise.all([
-          // Prefetch user role
-          queryClient.prefetchQuery({
-            queryKey: ["user-role", authUser.id],
-            queryFn: async () => {
-              const { data } = await supabase.rpc("get_user_role", { _user_id: authUser.id });
-              return data;
-            },
-          }),
-
-          // Prefetch page permissions for sidebar
-          queryClient.prefetchQuery({
-            queryKey: ["page-access-multiple", parentRoutes.join(","), authUser.id],
-            queryFn: async () => {
-              const { data } = await supabase.rpc("check_multiple_routes_access", { 
-                _routes: parentRoutes 
-              });
-              // Also cache to localStorage for instant sidebar render
-              if (Array.isArray(data)) {
-                const accessMap: Record<string, boolean> = {};
-                data.forEach((item: { route: string; has_access: boolean }) => {
-                  accessMap[item.route] = item.has_access;
-                });
-                try {
-                  localStorage.setItem('page-permissions-cache', JSON.stringify({
-                    userId: authUser.id,
-                    permissions: accessMap,
-                    timestamp: Date.now(),
-                  }));
-                } catch { /* ignore */ }
-                return accessMap;
-              }
-              return {};
-            },
-          }),
-        ]);
-      }
+      // Prefetch dashboard data in parallel while navigating
+      queryClient.prefetchQuery({
+        queryKey: ["helpdesk-dashboard-stats"],
+        queryFn: async () => {
+          const { data: tickets } = await supabase
+            .from("helpdesk_tickets")
+            .select("id, status, priority, sla_breached, created_at, resolved_at, first_response_at")
+            .eq("is_deleted", false);
+          return tickets;
+        },
+        staleTime: 5 * 60 * 1000,
+      });
+      queryClient.prefetchQuery({
+        queryKey: ["itam-stats"],
+        queryFn: async () => {
+          const { data } = await supabase.rpc("get_itam_stats");
+          return {
+            totalAssets: (data as any)?.totalAssets || 0,
+            assigned: (data as any)?.assigned || 0,
+            licenses: (data as any)?.licenses || 0,
+            laptops: 0,
+          };
+        },
+        staleTime: 5 * 60 * 1000,
+      });
 
       toast({
         title: "Success",
@@ -170,7 +155,7 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-background via-muted/20 to-background">
+    <main className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-background via-muted/20 to-background">
       <div className="w-full max-w-md animate-fade-in">
         <div className="bg-card rounded-lg border border-border shadow-lg p-6">
           {/* Header */}
@@ -255,7 +240,7 @@ const Login = () => {
           </div>
         </div>
       </div>
-    </div>
+    </main>
   );
 };
 

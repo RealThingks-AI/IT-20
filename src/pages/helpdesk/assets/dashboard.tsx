@@ -142,6 +142,20 @@ const AssetDashboard = () => {
     }
   });
 
+  // Fetch expiring leases (next 30 days) - stored in custom_fields
+  const expiringLeases = useMemo(() => {
+    const thirtyDaysFromNow = new Date();
+    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+    const today = new Date();
+    return assets.filter(asset => {
+      const customFields = asset.custom_fields as Record<string, any> | null;
+      const leaseExpiry = customFields?.lease_expiry;
+      if (!leaseExpiry) return false;
+      const expiryDate = new Date(leaseExpiry);
+      return expiryDate <= thirtyDaysFromNow && expiryDate >= today;
+    });
+  }, [assets]);
+
   // Fetch maintenance due
   const {
     data: maintenanceDue = []
@@ -224,9 +238,9 @@ const AssetDashboard = () => {
     return events;
   }, [expiringWarranties, maintenanceDue]);
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('en-IN', {
       style: 'currency',
-      currency: 'USD',
+      currency: 'INR',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
     }).format(value);
@@ -309,13 +323,17 @@ const AssetDashboard = () => {
             case "fiscalPurchases":
               return <AssetStatCard key={widget.id} title="Purchases in Fiscal Year" value={formatCurrency(fiscalYearValue)} subtitle={`${fiscalYearPurchases.length} assets purchased`} icon={ShoppingCart} iconBgColor="bg-orange-500" iconColor="text-white" animationDelay={animationDelay} />;
             case "checkedOut":
-              return <AssetStatCard key={widget.id} title="Checked-out Assets" value={checkedOutCount} subtitle="Currently assigned" icon={Package} iconBgColor="bg-cyan-500" iconColor="text-white" onClick={() => navigate("/assets/allassets?status=assigned")} animationDelay={animationDelay} />;
+              return <AssetStatCard key={widget.id} title="Checked-out Assets" value={checkedOutCount} subtitle="Currently assigned" icon={Package} iconBgColor="bg-cyan-500" iconColor="text-white" onClick={() => navigate("/assets/allassets?status=in_use")} animationDelay={animationDelay} />;
             case "underRepair":
               return <AssetStatCard key={widget.id} title="Under Repair" value={underRepairCount} subtitle="In maintenance" icon={Wrench} iconBgColor="bg-yellow-500" iconColor="text-white" onClick={() => navigate("/assets/repairs")} animationDelay={animationDelay} />;
             case "disposed":
               return <AssetStatCard key={widget.id} title="Disposed Assets" value={disposedCount} subtitle="Retired assets" icon={Package} iconBgColor="bg-gray-500" iconColor="text-white" onClick={() => navigate("/assets/allassets?status=disposed")} animationDelay={animationDelay} />;
             case "contracts":
               return <AssetStatCard key={widget.id} title="Active Contracts" value={0} subtitle="Under contract" icon={FileText} iconBgColor="bg-indigo-500" iconColor="text-white" onClick={() => navigate("/assets/lists/contracts")} animationDelay={animationDelay} />;
+            case "warrantyExpiring":
+              return <AssetStatCard key={widget.id} title="Warranty Expiring" value={expiringWarranties.length} subtitle="Within 30 days" icon={AlertTriangle} iconBgColor="bg-amber-500" iconColor="text-white" onClick={() => navigate("/assets/allassets?warranty=expiring")} animationDelay={animationDelay} />;
+            case "leaseExpiring":
+              return <AssetStatCard key={widget.id} title="Lease Expiring" value={expiringLeases.length} subtitle="Within 30 days" icon={Calendar} iconBgColor="bg-rose-500" iconColor="text-white" onClick={() => navigate("/assets/allassets?lease=expiring")} animationDelay={animationDelay} />;
             default:
               return null;
           }

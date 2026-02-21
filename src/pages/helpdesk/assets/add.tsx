@@ -15,7 +15,7 @@ import { useAssetSetupConfig } from "@/hooks/useAssetSetupConfig";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { format } from "date-fns";
+import { format, addMonths } from "date-fns";
 import { CalendarIcon } from "lucide-react";
 import { AssetPhotoSelector } from "@/components/helpdesk/assets/AssetPhotoSelector";
 import { QuickAddFieldDialog, FieldType } from "@/components/helpdesk/assets/QuickAddFieldDialog";
@@ -32,18 +32,6 @@ const currencies = [{
   code: "EUR",
   name: "Euro",
   symbol: "€"
-}, {
-  code: "GBP",
-  name: "British Pound",
-  symbol: "£"
-}, {
-  code: "AUD",
-  name: "Australian Dollar",
-  symbol: "A$"
-}, {
-  code: "CAD",
-  name: "Canadian Dollar",
-  symbol: "C$"
 }];
 
 import { ASSET_STATUS_OPTIONS } from "@/lib/assetStatusUtils";
@@ -85,7 +73,14 @@ export default function AddAsset() {
     category_id: "",
     department_id: "",
     photo_url: null as string | null,
-    status: "available"
+    status: "available",
+    // Warranty fields
+    add_warranty: false,
+    warranty_months: "12",
+    warranty_expiry: null as Date | null,
+    // Lease fields
+    lease_start_date: null as Date | null,
+    lease_expiry: null as Date | null
   });
 
   const [isAutoFilling, setIsAutoFilling] = useState(false);
@@ -143,11 +138,28 @@ export default function AddAsset() {
         category_id: existingAsset.category_id || "",
         department_id: existingAsset.department_id || "",
         photo_url: customFields?.photo_url || null,
-        status: existingAsset.status || "available"
+        status: existingAsset.status || "available",
+        // Warranty fields from existing asset
+        add_warranty: !!existingAsset.warranty_expiry,
+        warranty_months: "12",
+        warranty_expiry: existingAsset.warranty_expiry ? new Date(existingAsset.warranty_expiry) : null,
+        // Lease fields from custom_fields
+        lease_start_date: customFields?.lease_start_date ? new Date(customFields.lease_start_date) : null,
+        lease_expiry: customFields?.lease_expiry ? new Date(customFields.lease_expiry) : null
       });
       setHasPopulatedForm(true);
     }
   }, [existingAsset, isEditMode, hasPopulatedForm]);
+
+  // Auto-calculate warranty expiry when warranty checkbox, purchase date, or months change
+  useEffect(() => {
+    if (formData.add_warranty && formData.purchase_date && formData.warranty_months) {
+      const expiry = addMonths(formData.purchase_date, parseInt(formData.warranty_months));
+      setFormData(prev => ({ ...prev, warranty_expiry: expiry }));
+    } else if (!formData.add_warranty) {
+      setFormData(prev => ({ ...prev, warranty_expiry: null }));
+    }
+  }, [formData.add_warranty, formData.purchase_date, formData.warranty_months]);
 
   // Filter locations based on selected site - include locations with null site_id
   const filteredLocations = useMemo(() => {
@@ -230,12 +242,12 @@ export default function AddAsset() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      const [profileResult, userResult] = await Promise.all([
-        supabase.from("profiles").select("tenant_id").eq("id", user.id).maybeSingle(),
-        supabase.from("users").select("organisation_id").eq("auth_user_id", user.id).maybeSingle()
-      ]);
-      const tenantId = profileResult.data?.tenant_id || 1;
-      const organisationId = userResult.data?.organisation_id;
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("tenant_id")
+        .eq("id", user.id)
+        .maybeSingle();
+      const tenantId = profileData?.tenant_id || 1;
 
       const classifications: string[] = [];
       if (formData.classification_confidential) classifications.push("confidential");
@@ -243,6 +255,15 @@ export default function AddAsset() {
       if (formData.classification_public) classifications.push("public");
 
       const assetId = formData.asset_tag || `AST-${Date.now()}`;
+
+      // Check for duplicate asset tag before inserting
+      const { data: existingTag } = await supabase
+        .from("itam_assets")
+        .select("id")
+        .eq("asset_tag", assetId)
+        .eq("is_active", true)
+        .maybeSingle();
+      if (existingTag) throw new Error("This Asset Tag ID is already in use. Please use a different one.");
 
       // @ts-ignore - Complex Supabase type inference issue
       const { error } = await supabase.from("itam_assets").insert({
@@ -259,16 +280,18 @@ export default function AddAsset() {
         purchase_price: formData.cost ? parseFloat(formData.cost) : null,
         notes: formData.description || null,
         tenant_id: tenantId,
-        organisation_id: organisationId,
         is_active: true,
         purchase_date: formData.purchase_date ? format(formData.purchase_date, "yyyy-MM-dd") : null,
+        warranty_expiry: formData.warranty_expiry ? format(formData.warranty_expiry, "yyyy-MM-dd") : null,
         custom_fields: {
           asset_configuration: formData.asset_configuration,
           classification: classifications,
           currency: formData.currency,
           vendor: formData.purchased_from,
           photo_url: formData.photo_url,
-          site_id: formData.site_id || null
+          site_id: formData.site_id || null,
+          lease_start_date: formData.lease_start_date ? format(formData.lease_start_date, "yyyy-MM-dd") : null,
+          lease_expiry: formData.lease_expiry ? format(formData.lease_expiry, "yyyy-MM-dd") : null
         }
       } as any);
       if (error) throw error;
@@ -287,6 +310,18 @@ export default function AddAsset() {
   const updateAsset = useMutation({
     mutationFn: async () => {
       if (!editAssetId) throw new Error("No asset ID provided");
+
+      // Check for duplicate asset tag (excluding current asset)
+      if (formData.asset_tag) {
+        const { data: existingTag } = await supabase
+          .from("itam_assets")
+          .select("id")
+          .eq("asset_tag", formData.asset_tag)
+          .eq("is_active", true)
+          .neq("id", editAssetId)
+          .maybeSingle();
+        if (existingTag) throw new Error("This Asset Tag ID is already in use. Please use a different one.");
+      }
 
       const classifications: string[] = [];
       if (formData.classification_confidential) classifications.push("confidential");
@@ -308,13 +343,16 @@ export default function AddAsset() {
           purchase_price: formData.cost ? parseFloat(formData.cost) : null,
           notes: formData.description || null,
           purchase_date: formData.purchase_date ? format(formData.purchase_date, "yyyy-MM-dd") : null,
+          warranty_expiry: formData.warranty_expiry ? format(formData.warranty_expiry, "yyyy-MM-dd") : null,
           custom_fields: {
             asset_configuration: formData.asset_configuration,
             classification: classifications,
             currency: formData.currency,
             vendor: formData.purchased_from,
             photo_url: formData.photo_url,
-            site_id: formData.site_id || null
+            site_id: formData.site_id || null,
+            lease_start_date: formData.lease_start_date ? format(formData.lease_start_date, "yyyy-MM-dd") : null,
+            lease_expiry: formData.lease_expiry ? format(formData.lease_expiry, "yyyy-MM-dd") : null
           }
         })
         .eq("id", editAssetId);
@@ -525,22 +563,55 @@ export default function AddAsset() {
                 <Input id="model" value={formData.model} onChange={e => setFormData({ ...formData, model: e.target.value })} placeholder="Enter model" className="h-8 text-sm" />
               </div>
 
-              {/* Purchase Date */}
+              {/* Purchase Date & Warranty */}
               <div className="space-y-1.5">
                 <Label className="text-xs">
                   Purchase Date <span className="text-destructive">*</span>
                 </Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className={cn("w-full justify-start text-left font-normal h-8 text-sm", !formData.purchase_date && "text-muted-foreground")}>
-                      <CalendarIcon className="mr-2 h-3.5 w-3.5" />
-                      {formData.purchase_date ? format(formData.purchase_date, "PPP") : "Pick a date"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0 z-[200]" align="start">
-                    <Calendar mode="single" selected={formData.purchase_date || undefined} onSelect={date => setFormData({ ...formData, purchase_date: date || null })} initialFocus className="pointer-events-auto" />
-                  </PopoverContent>
-                </Popover>
+                <div className="flex items-center gap-1.5">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className={cn("justify-start text-left font-normal h-8 text-xs shrink-0", formData.purchase_date && formData.add_warranty ? "w-[130px]" : "flex-1", !formData.purchase_date && "text-muted-foreground")}>
+                        <CalendarIcon className="mr-1.5 h-3 w-3" />
+                        {formData.purchase_date ? format(formData.purchase_date, "PP") : "Pick a date"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0 z-[200]" align="start">
+                      <Calendar mode="single" selected={formData.purchase_date || undefined} onSelect={date => setFormData({ ...formData, purchase_date: date || null })} initialFocus className="pointer-events-auto" />
+                    </PopoverContent>
+                  </Popover>
+                  {formData.purchase_date && (
+                    <div className="flex items-center gap-1">
+                      <Checkbox
+                        id="add_warranty"
+                        checked={formData.add_warranty}
+                        onCheckedChange={checked => setFormData({ ...formData, add_warranty: !!checked })}
+                        className="h-3.5 w-3.5"
+                      />
+                      <Label htmlFor="add_warranty" className="text-xs font-normal cursor-pointer whitespace-nowrap">Warranty</Label>
+                    </div>
+                  )}
+                  {formData.purchase_date && formData.add_warranty && (
+                    <>
+                      <Select
+                        value={formData.warranty_months}
+                        onValueChange={value => setFormData({ ...formData, warranty_months: value })}
+                      >
+                        <SelectTrigger className="h-8 text-xs w-[90px] shrink-0">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1">1 Month</SelectItem>
+                          <SelectItem value="3">3 Months</SelectItem>
+                          <SelectItem value="6">6 Months</SelectItem>
+                          <SelectItem value="12">1 Year</SelectItem>
+                          <SelectItem value="24">2 Years</SelectItem>
+                          <SelectItem value="36">3 Years</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </>
+                  )}
+                </div>
               </div>
 
               {/* Vendor */}
@@ -573,46 +644,22 @@ export default function AddAsset() {
                 </div>
               </div>
 
-              {/* Asset Configuration */}
-              <div className="space-y-1.5">
-                <Label htmlFor="asset_configuration" className="text-xs">
-                  Asset Configuration
-                </Label>
-                <Input id="asset_configuration" value={formData.asset_configuration} onChange={e => setFormData({ ...formData, asset_configuration: e.target.value })} placeholder="Enter configuration" className="h-8 text-sm" />
-              </div>
-
-              {/* Description - Full width */}
-              <div className="space-y-1.5 md:col-span-3">
-                <Label htmlFor="description" className="text-xs">
-                  Description
-                </Label>
-                <Textarea id="description" value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} placeholder="Enter asset description" rows={2} className="text-sm resize-none" />
-              </div>
-
-              {/* Asset Classification */}
-              <div className="space-y-1.5 md:col-span-3">
-                <Label className="text-xs">Asset Classification</Label>
-                <div className="flex gap-6">
-                  <div className="flex items-center space-x-2">
-                    <Checkbox id="confidential" checked={formData.classification_confidential} onCheckedChange={checked => setFormData({ ...formData, classification_confidential: !!checked })} />
-                    <Label htmlFor="confidential" className="font-normal cursor-pointer text-sm">
-                      Confidential
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox id="internal" checked={formData.classification_internal} onCheckedChange={checked => setFormData({ ...formData, classification_internal: !!checked })} />
-                    <Label htmlFor="internal" className="font-normal cursor-pointer text-sm">
-                      Internal
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox id="public" checked={formData.classification_public} onCheckedChange={checked => setFormData({ ...formData, classification_public: !!checked })} />
-                    <Label htmlFor="public" className="font-normal cursor-pointer text-sm">
-                      Public
-                    </Label>
-                  </div>
+              {/* Asset Configuration & Description - Side by side */}
+              <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="asset_configuration" className="text-xs">
+                    Asset Configuration
+                  </Label>
+                  <Textarea id="asset_configuration" value={formData.asset_configuration} onChange={e => setFormData({ ...formData, asset_configuration: e.target.value })} placeholder="Enter configuration" rows={2} className="text-sm resize-none" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="description" className="text-xs">
+                    Description
+                  </Label>
+                  <Textarea id="description" value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} placeholder="Enter asset description" rows={2} className="text-sm resize-none" />
                 </div>
               </div>
+
             </div>
           </CardContent>
         </Card>

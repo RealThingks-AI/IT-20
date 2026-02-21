@@ -20,7 +20,6 @@ export interface SystemDevice {
   assigned_to: string | null;
   notes: string | null;
   is_active: boolean;
-  organisation_id: string | null;
   tenant_id: number | null;
   created_at: string;
   updated_at: string;

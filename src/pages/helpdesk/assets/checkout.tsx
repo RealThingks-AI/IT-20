@@ -59,11 +59,15 @@ const CheckoutPage = () => {
       if (selectedAssets.length === 0) throw new Error("Please select at least one asset");
       if (!assignTo) throw new Error("Please select a person to assign to");
 
+      const now = new Date().toISOString();
+      const selectedUser = users.find((u) => u.id === assignTo);
+      const assignedToName = getUserDisplayName(selectedUser) || selectedUser?.email || assignTo;
+
       // Create assignments for all selected assets
       const assignments = selectedAssets.map(assetId => ({
         asset_id: assetId,
         assigned_to: assignTo,
-        assigned_at: new Date().toISOString(),
+        assigned_at: now,
         expected_return_date: expectedReturn?.toISOString() || null,
         notes: notes || null,
       }));
@@ -74,17 +78,42 @@ const CheckoutPage = () => {
 
       if (assignError) throw assignError;
 
-      // Update asset statuses to in_use (matches database constraint)
+      // Update asset statuses and assignment fields
       const { error: updateError } = await supabase
         .from("itam_assets")
-        .update({ status: "in_use" })
+        .update({ 
+          status: "in_use",
+          assigned_to: assignedToName,
+          checked_out_to: assignTo,
+          checked_out_at: now,
+          expected_return_date: expectedReturn?.toISOString() || null,
+          check_out_notes: notes || null,
+        })
         .in("id", selectedAssets);
 
       if (updateError) throw updateError;
+
+      // Log to history for each asset
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      for (const assetId of selectedAssets) {
+        await supabase.from("itam_asset_history").insert({
+          asset_id: assetId,
+          action: "checked_out",
+          details: { 
+            assigned_to: assignedToName,
+            user_id: assignTo,
+            expected_return: expectedReturn?.toISOString(),
+            notes,
+          },
+          performed_by: currentUser?.id,
+        });
+      }
     },
     onSuccess: () => {
       toast.success(`${selectedAssets.length} asset(s) checked out successfully`);
       queryClient.invalidateQueries({ queryKey: ["itam-assets"] });
+      queryClient.invalidateQueries({ queryKey: ["helpdesk-assets"] });
+      queryClient.invalidateQueries({ queryKey: ["helpdesk-assets-count"] });
       navigate("/assets/allassets");
     },
     onError: (error: any) => {

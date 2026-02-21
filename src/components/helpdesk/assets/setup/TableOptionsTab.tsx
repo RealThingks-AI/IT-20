@@ -65,23 +65,13 @@ export function TableOptionsTab() {
           .eq("id", existing.id);
         if (error) throw error;
       } else {
-        // For insert, we still need org_id for the DB constraint
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error("Not authenticated");
-
-        const { data: userData } = await supabase
-          .from("users")
-          .select("organisation_id")
-          .eq("auth_user_id", user.id)
-          .single();
-
+        // Insert without org_id - use tenant_id if needed
         const { error } = await supabase
           .from("itam_settings")
           .insert({
-            organisation_id: userData?.organisation_id,
             key: "asset_table_columns",
             value: { visible_columns: visibleColumns },
-          });
+          } as any);
         if (error) throw error;
       }
     },

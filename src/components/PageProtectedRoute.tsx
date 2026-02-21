@@ -7,15 +7,10 @@ interface PageProtectedRouteProps {
   route: string;
 }
 
-/**
- * Simplified PageProtectedRoute for single-company internal use
- * 
- * No longer depends on OrganisationContext loading state
- */
 export function PageProtectedRoute({ children, route }: PageProtectedRouteProps) {
   const { hasAccess, isLoading } = usePageAccess(route);
 
-  // Wait for permissions to load
+  // If store is ready, no loading needed — instant check
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full p-8">
@@ -24,7 +19,6 @@ export function PageProtectedRoute({ children, route }: PageProtectedRouteProps)
     );
   }
 
-  // Only redirect if explicitly denied (not undefined/loading)
   if (hasAccess === false) {
     return <Navigate to="/access-denied" replace />;
   }

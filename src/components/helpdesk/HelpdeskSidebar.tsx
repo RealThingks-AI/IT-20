@@ -130,21 +130,6 @@ const sidebarSections: SidebarSection[] = [{
   url: "/monitoring",
   icon: Activity,
   parentRoute: "/monitoring"
-}, {
-  title: "Reports",
-  url: "/reports",
-  icon: BarChart3,
-  parentRoute: "/reports"
-}, {
-  title: "Audit",
-  url: "/audit",
-  icon: ClipboardCheck,
-  parentRoute: "/audit"
-}, {
-  title: "Settings",
-  url: "/settings",
-  icon: Settings,
-  parentRoute: "/settings"
 }];
 
 export function HelpdeskSidebar() {
@@ -446,6 +431,42 @@ export function HelpdeskSidebar() {
             );
           }
           return collapseButton;
+        })()}
+      </div>
+
+      {/* Settings Button */}
+      <div className="px-1.5 pb-1">
+        {(() => {
+          const settingsActive = location.pathname.startsWith("/settings");
+          const settingsButton = (
+            <NavLink
+              to="/settings"
+              className={cn(
+                "flex items-center h-8 w-full rounded-lg transition-all duration-200 text-sm",
+                settingsActive
+                  ? "text-primary bg-accent"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent/40"
+              )}
+            >
+              <div className="w-12 flex items-center justify-center flex-shrink-0">
+                <Settings className="h-4 w-4" />
+              </div>
+              {!collapsed && <span>Settings</span>}
+            </NavLink>
+          );
+          if (collapsed) {
+            return (
+              <TooltipProvider delayDuration={0}>
+                <Tooltip>
+                  <TooltipTrigger asChild>{settingsButton}</TooltipTrigger>
+                  <TooltipContent side="right" sideOffset={8} className="z-50">
+                    <p className="text-xs">Settings</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            );
+          }
+          return settingsButton;
         })()}
       </div>
 

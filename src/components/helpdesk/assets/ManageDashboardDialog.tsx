@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { GripVertical, Package, CheckCircle2, DollarSign, ShoppingCart, Wrench, Trash2, FileText, Loader2 } from "lucide-react";
+import { GripVertical, Package, CheckCircle2, DollarSign, ShoppingCart, Wrench, Trash2, FileText, Loader2, AlertTriangle, Calendar } from "lucide-react";
 import { useUISettings, DashboardPreferencesSetting, DashboardWidgetSetting } from "@/hooks/useUISettings";
 
 export interface DashboardWidget {
@@ -40,6 +40,8 @@ const DEFAULT_WIDGETS: DashboardWidget[] = [
   { id: "underRepair", label: "Under Repair", icon: Wrench, enabled: false },
   { id: "disposed", label: "Disposed Assets", icon: Trash2, enabled: false },
   { id: "contracts", label: "Active Contracts", icon: FileText, enabled: false },
+  { id: "warrantyExpiring", label: "Warranty Expiring", icon: AlertTriangle, enabled: true },
+  { id: "leaseExpiring", label: "Lease Expiring", icon: Calendar, enabled: true },
 ];
 
 const WIDGET_ICON_MAP: Record<string, React.ElementType> = {
@@ -51,6 +53,8 @@ const WIDGET_ICON_MAP: Record<string, React.ElementType> = {
   underRepair: Wrench,
   disposed: Trash2,
   contracts: FileText,
+  warrantyExpiring: AlertTriangle,
+  leaseExpiring: Calendar,
 };
 
 const DEFAULT_PREFERENCES: DashboardPreferences = {

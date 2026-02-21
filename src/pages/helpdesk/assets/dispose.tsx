@@ -182,7 +182,9 @@ const DisposePage = () => {
                           <Badge variant="secondary">{asset.status}</Badge>
                         </TableCell>
                         <TableCell>
-                          {asset.purchase_price ? `$${parseFloat(String(asset.purchase_price)).toLocaleString()}` : 'N/A'}
+                          {asset.purchase_price 
+                            ? `₹${parseFloat(String(asset.purchase_price)).toLocaleString('en-IN')}` 
+                            : 'N/A'}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -212,7 +214,7 @@ const DisposePage = () => {
                 <div className="p-3 bg-accent rounded-lg">
                   <p className="text-sm">
                     <span className="font-medium">Total Value:</span>{' '}
-                    ${totalValue.toLocaleString()}
+                    ₹{totalValue.toLocaleString('en-IN')}
                   </p>
                 </div>
               )}

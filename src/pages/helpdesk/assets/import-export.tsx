@@ -188,9 +188,9 @@ export default function ImportExportPage() {
           <TabsContent value="import" className="space-y-4 mt-4">
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Import Assets from CSV</CardTitle>
+                <CardTitle className="text-base">Import Assets</CardTitle>
                 <CardDescription>
-                  Upload a CSV file to import assets. Download the template for the correct format.
+                  Upload an Excel (.xlsx) or CSV file to import assets. AssetTiger exports are fully supported.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -211,11 +211,11 @@ export default function ImportExportPage() {
 
                 {/* File Upload */}
                 <div className="space-y-2">
-                  <Label htmlFor="import-file">Select CSV File</Label>
+                  <Label htmlFor="import-file">Select File (.xlsx, .xls, .csv)</Label>
                   <Input
                     id="import-file"
                     type="file"
-                    accept=".csv"
+                    accept=".xlsx,.xls,.csv"
                     onChange={handleFileSelect}
                     disabled={isImporting}
                   />
@@ -311,40 +311,52 @@ export default function ImportExportPage() {
             {/* Field Mapping Reference */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Supported Columns</CardTitle>
+                <CardTitle className="text-base">Supported Columns (AssetTiger Compatible)</CardTitle>
                 <CardDescription>
-                  Use these column headers in your CSV file
+                  All 28 AssetTiger columns are supported, plus additional fields
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                   {[
                     "Asset Tag ID",
-                    "Name",
                     "Description",
                     "Category",
-                    "Brand (Make)",
+                    "Brand",
                     "Model",
-                    "Serial Number",
+                    "Serial No",
                     "Status",
-                    "Location",
-                    "Department",
                     "Cost",
                     "Purchase Date",
-                    "Purchased From (Vendor)",
+                    "Purchased from",
+                    "Location",
+                    "Site",
+                    "Department",
+                    "Assigned to",
+                    "Date Created",
+                    "Created by",
+                    "Leased to",
+                    "Relation",
+                    "Transact as a whole",
+                    "Event Date",
+                    "Event Due Date",
+                    "Event Notes",
+                    "Asset Configuration",
+                    "Asset Classification",
+                    "Asset Photo",
+                    "Headphone",
+                    "Mouse",
+                    "Keyboard",
                     "Warranty Expiry",
-                    "Notes",
-                    "Configuration",
-                    "Classification",
-                  ].map((col) => (
-                    <Badge key={col} variant="outline" className="text-xs justify-start">
-                      {col}
+                  ].map((c) => (
+                    <Badge key={c} variant="outline" className="text-xs justify-start">
+                      {c}
                     </Badge>
                   ))}
                 </div>
                 <p className="text-xs text-muted-foreground mt-3">
                   <strong>Required:</strong> Asset Tag ID. All other fields are optional.
-                  Category, Make, Location, Department, and Vendor must match existing names.
+                  Category, Brand, Location, Site, Department, and Vendor will be <strong>auto-created</strong> if they don't already exist.
                 </p>
               </CardContent>
             </Card>

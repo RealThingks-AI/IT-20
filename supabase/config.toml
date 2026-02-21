@@ -1,1 +1,10 @@
 project_id = "iarndwlbrmjbsjvugqvr"
+
+[functions.keep-alive]
+verify_jwt = false
+
+[functions.bulk-create-users]
+verify_jwt = false
+
+[functions.migrate-asset-photos]
+verify_jwt = false
