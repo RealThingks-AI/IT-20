@@ -222,6 +222,8 @@ const AssetDetail = () => {
       case "in_use": return "secondary";
       case "maintenance": return "destructive";
       case "retired": return "outline";
+      case "disposed": return "destructive";
+      case "lost": return "outline";
       default: return "secondary";
     }
   };
@@ -244,6 +246,17 @@ const AssetDetail = () => {
 
   return (
     <div className="w-full h-full flex flex-col overflow-hidden">
+      {/* Breadcrumb Navigation */}
+      <div className="shrink-0 px-4 pt-2 pb-0">
+        <nav className="flex items-center text-xs text-muted-foreground">
+          <span className="hover:text-foreground cursor-pointer" onClick={() => navigate("/assets")}>Assets</span>
+          <span className="mx-1.5">/</span>
+          <span className="hover:text-foreground cursor-pointer" onClick={() => navigate("/assets/allassets")}>All Assets</span>
+          <span className="mx-1.5">/</span>
+          <span className="text-foreground font-medium">{asset.asset_tag || asset.asset_id || 'Detail'}</span>
+        </nav>
+      </div>
+
       {/* Header with Title and Action Buttons - Fixed */}
       <div className="shrink-0 flex items-center justify-between p-4 pb-2">
         <div className="flex items-center gap-2">
@@ -273,7 +286,7 @@ const AssetDetail = () => {
           {/* More Actions Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="default" size="sm" className="gap-1 bg-green-600 hover:bg-green-700">
+              <Button variant="default" size="sm" className="gap-1">
                 More Actions
               </Button>
             </DropdownMenuTrigger>

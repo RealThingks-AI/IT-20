@@ -127,7 +127,6 @@ export const CreateTicketDialog = ({ open, onOpenChange }: CreateTicketDialogPro
         "generate_helpdesk_ticket_number",
         {
           p_tenant_id: tenantId,
-          p_org_id: null as any,
         }
       );
 

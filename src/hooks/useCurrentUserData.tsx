@@ -4,7 +4,6 @@ import { useSessionStore } from "@/stores/useSessionStore";
 export interface CurrentUserData {
   authUserId: string;
   email: string | undefined;
-  organisationId: string;
   tenantId: number;
   role: string | null;
   name: string | null;
@@ -24,7 +23,6 @@ export const useCurrentUserData = () => {
   const data: CurrentUserData | null = user ? {
     authUserId: user.id,
     email: storeEmail || user.email,
-    organisationId: 'single-company',
     tenantId: 1,
     role: storeRole,
     name: storeName || user.user_metadata?.name || null,

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -54,6 +54,21 @@ export default function AddAsset() {
     isLoading: configLoading
   } = useAssetSetupConfig();
 
+  // Fetch vendors for the dropdown
+  const { data: vendors = [] } = useQuery({
+    queryKey: ["itam-vendors"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("itam_vendors")
+        .select("id, name")
+        .eq("is_active", true)
+        .order("name");
+      if (error) throw error;
+      return data || [];
+    },
+    staleTime: 30000
+  });
+
   const [formData, setFormData] = useState({
     asset_tag: "",
     serial_number: "",
@@ -61,6 +76,7 @@ export default function AddAsset() {
     model: "",
     purchase_date: null as Date | null,
     purchased_from: "",
+    vendor_id: "",
     cost: "",
     currency: "INR",
     description: "",
@@ -86,6 +102,7 @@ export default function AddAsset() {
   const [isAutoFilling, setIsAutoFilling] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [hasPopulatedForm, setHasPopulatedForm] = useState(false);
+  const autoFillRef = useRef(false);
 
   // Quick Add Dialog state
   const [quickAddOpen, setQuickAddOpen] = useState(false);
@@ -126,6 +143,7 @@ export default function AddAsset() {
         model: existingAsset.model || "",
         purchase_date: existingAsset.purchase_date ? new Date(existingAsset.purchase_date) : null,
         purchased_from: customFields?.vendor || existingAsset.vendor?.name || "",
+        vendor_id: existingAsset.vendor_id || "",
         cost: existingAsset.purchase_price?.toString() || "",
         currency: customFields?.currency || "INR",
         description: existingAsset.notes || "",
@@ -194,6 +212,9 @@ export default function AddAsset() {
       toast.error("Please select a category first");
       return;
     }
+    // Ref guard to prevent double-clicks / rapid calls
+    if (autoFillRef.current) return;
+    autoFillRef.current = true;
     setIsAutoFilling(true);
     try {
       const { data, error } = await supabase.functions.invoke("get-next-asset-id-by-category", {
@@ -210,6 +231,19 @@ export default function AddAsset() {
         return;
       }
       if (data?.assetId) {
+        // Post-generation uniqueness validation
+        const { data: existing } = await supabase
+          .from("itam_assets")
+          .select("id")
+          .eq("asset_tag", data.assetId)
+          .eq("is_active", true)
+          .maybeSingle();
+
+        if (existing) {
+          toast.error(`Generated ID "${data.assetId}" already exists. Please enter manually or retry.`);
+          return;
+        }
+
         setFormData(prev => ({
           ...prev,
           asset_tag: data.assetId
@@ -220,6 +254,7 @@ export default function AddAsset() {
       toast.error("Failed to generate Asset Tag ID");
     } finally {
       setIsAutoFilling(false);
+      autoFillRef.current = false;
     }
   };
 
@@ -275,6 +310,7 @@ export default function AddAsset() {
         location_id: formData.location_id || null,
         department_id: formData.department_id || null,
         make_id: formData.make_id || null,
+        vendor_id: formData.vendor_id || null,
         model: formData.model || null,
         serial_number: formData.serial_number || null,
         purchase_price: formData.cost ? parseFloat(formData.cost) : null,
@@ -338,6 +374,7 @@ export default function AddAsset() {
           location_id: formData.location_id || null,
           department_id: formData.department_id || null,
           make_id: formData.make_id || null,
+          vendor_id: formData.vendor_id || null,
           model: formData.model || null,
           serial_number: formData.serial_number || null,
           purchase_price: formData.cost ? parseFloat(formData.cost) : null,
@@ -616,10 +653,27 @@ export default function AddAsset() {
 
               {/* Vendor */}
               <div className="space-y-1.5">
-                <Label htmlFor="purchased_from" className="text-xs">
-                  Vendor <span className="text-destructive">*</span>
+                <Label className="text-xs">
+                  Vendor
                 </Label>
-                <Input id="purchased_from" value={formData.purchased_from} onChange={e => setFormData({ ...formData, purchased_from: e.target.value })} placeholder="Enter vendor name" className="h-8 text-sm" />
+                <div className="flex gap-1.5">
+                  <Select value={formData.vendor_id} onValueChange={value => setFormData({ ...formData, vendor_id: value, purchased_from: "" })}>
+                    <SelectTrigger className="flex-1 h-8 text-sm">
+                      <SelectValue placeholder="Select vendor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {vendors.length === 0 ? (
+                        <div className="px-2 py-3 text-xs text-muted-foreground text-center">
+                          No vendors found.
+                        </div>
+                      ) : (
+                        vendors.map(v => (
+                          <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               {/* Cost with Currency */}

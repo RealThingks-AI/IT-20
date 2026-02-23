@@ -305,7 +305,7 @@ const AssetDashboard = () => {
         showExport={false}
       />
 
-      <div className="p-4 md:p-6 space-y-6">
+      <div className="p-4 space-y-4">
 
         {/* Stats Cards Row */}
         {assetsLoading ? <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -498,7 +498,7 @@ const AssetDashboard = () => {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                 {/* Assets Due */}
                 <div className="flex items-center gap-3 p-3 rounded-lg border border-red-200 bg-red-50/50 dark:bg-red-950/20 dark:border-red-900 cursor-pointer hover:border-red-400 hover:shadow-sm transition-all duration-200 hover:-translate-y-0.5" onClick={() => navigate("/assets/alerts?type=overdue")}>
-                  <div className="p-2 rounded-full bg-red-100 dark:bg-red-900/50">
+                  <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/50">
                     <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
                   </div>
                   <div>
@@ -509,7 +509,7 @@ const AssetDashboard = () => {
 
                 {/* Maintenance Due */}
                 <div className="flex items-center gap-3 p-3 rounded-lg border border-green-200 bg-green-50/50 dark:bg-green-950/20 dark:border-green-900 cursor-pointer hover:border-green-400 hover:shadow-sm transition-all duration-200 hover:-translate-y-0.5" onClick={() => navigate("/assets/alerts?type=maintenance")}>
-                  <div className="p-2 rounded-full bg-green-100 dark:bg-green-900/50">
+                  <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/50">
                     <Wrench className="h-5 w-5 text-green-600 dark:text-green-400" />
                   </div>
                   <div>
@@ -520,7 +520,7 @@ const AssetDashboard = () => {
 
                 {/* Contracts Pending */}
                 <div className="flex items-center gap-3 p-3 rounded-lg border border-orange-200 bg-orange-50/50 dark:bg-orange-950/20 dark:border-orange-900 cursor-pointer hover:border-orange-400 hover:shadow-sm transition-all duration-200 hover:-translate-y-0.5" onClick={() => navigate("/assets/alerts?type=contracts")}>
-                  <div className="p-2 rounded-full bg-orange-100 dark:bg-orange-900/50">
+                  <div className="p-2 rounded-lg bg-orange-100 dark:bg-orange-900/50">
                     <FileText className="h-5 w-5 text-orange-600 dark:text-orange-400" />
                   </div>
                   <div>
@@ -531,7 +531,7 @@ const AssetDashboard = () => {
 
                 {/* Warranty Pending */}
                 <div className="flex items-center gap-3 p-3 rounded-lg border border-purple-200 bg-purple-50/50 dark:bg-purple-950/20 dark:border-purple-900 cursor-pointer hover:border-purple-400 hover:shadow-sm transition-all duration-200 hover:-translate-y-0.5" onClick={() => navigate("/assets/alerts?type=warranty")}>
-                  <div className="p-2 rounded-full bg-purple-100 dark:bg-purple-900/50">
+                  <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/50">
                     <Calendar className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                   </div>
                   <div>

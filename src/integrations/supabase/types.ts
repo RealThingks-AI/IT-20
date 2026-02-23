@@ -4329,14 +4329,32 @@ export type Database = {
     }
     Functions: {
       bootstrap_session: { Args: never; Returns: Json }
-      bulk_soft_delete_problems: {
-        Args: { problem_ids: number[] }
-        Returns: undefined
-      }
-      bulk_soft_delete_tickets: {
-        Args: { ticket_ids: number[] }
-        Returns: undefined
-      }
+      bulk_soft_delete_problems:
+        | {
+            Args: { problem_ids: number[] }
+            Returns: {
+              error: true
+            } & "Could not choose the best candidate function between: public.bulk_soft_delete_problems(problem_ids => _int4), public.bulk_soft_delete_problems(problem_ids => _int8). Try renaming the parameters or the function itself in the database so function overloading can be resolved"
+          }
+        | {
+            Args: { problem_ids: number[] }
+            Returns: {
+              error: true
+            } & "Could not choose the best candidate function between: public.bulk_soft_delete_problems(problem_ids => _int4), public.bulk_soft_delete_problems(problem_ids => _int8). Try renaming the parameters or the function itself in the database so function overloading can be resolved"
+          }
+      bulk_soft_delete_tickets:
+        | {
+            Args: { ticket_ids: number[] }
+            Returns: {
+              error: true
+            } & "Could not choose the best candidate function between: public.bulk_soft_delete_tickets(ticket_ids => _int4), public.bulk_soft_delete_tickets(ticket_ids => _int8). Try renaming the parameters or the function itself in the database so function overloading can be resolved"
+          }
+        | {
+            Args: { ticket_ids: number[] }
+            Returns: {
+              error: true
+            } & "Could not choose the best candidate function between: public.bulk_soft_delete_tickets(ticket_ids => _int4), public.bulk_soft_delete_tickets(ticket_ids => _int8). Try renaming the parameters or the function itself in the database so function overloading can be resolved"
+          }
       calculate_sla_due_date: {
         Args: {
           org_id?: string
@@ -4363,17 +4381,29 @@ export type Database = {
       }
       clean_expired_recovery_codes: { Args: never; Returns: undefined }
       cleanup_old_backups: { Args: { _org_id: string }; Returns: undefined }
-      create_notification: {
-        Args: {
-          p_message: string
-          p_organisation_id?: string
-          p_tenant_id?: number
-          p_title: string
-          p_type: Database["public"]["Enums"]["notification_type"]
-          p_user_id: string
-        }
-        Returns: string
-      }
+      create_notification:
+        | {
+            Args: {
+              p_message: string
+              p_organisation_id?: string
+              p_tenant_id?: number
+              p_title: string
+              p_type: Database["public"]["Enums"]["notification_type"]
+              p_user_id: string
+            }
+            Returns: string
+          }
+        | {
+            Args: {
+              p_message: string
+              p_organisation_id?: string
+              p_tenant_id?: number
+              p_title: string
+              p_type?: string
+              p_user_id: string
+            }
+            Returns: string
+          }
       generate_asset_tag: { Args: { tenant_id_param: number }; Returns: string }
       generate_change_number: {
         Args: { p_org_id?: string; p_tenant_id: number }

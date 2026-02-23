@@ -24,7 +24,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
-import { useOrganisationUsers } from "@/hooks/useOrganisationUsers";
+import { useOrganisationUsers } from "@/hooks/useUsers";
 import { getUserDisplayName } from "@/lib/userUtils";
 
 interface BulkActionsProblemButtonProps {

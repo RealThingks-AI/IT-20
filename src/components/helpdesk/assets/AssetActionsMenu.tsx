@@ -60,13 +60,6 @@ export function AssetActionsMenu({ asset, onActionComplete }: AssetActionsMenuPr
     queryClient.invalidateQueries({ queryKey: ["helpdesk-assets"] });
     queryClient.invalidateQueries({ queryKey: ["helpdesk-assets-count"] });
     queryClient.invalidateQueries({ queryKey: ["itam-asset-detail"] });
-    queryClient.invalidateQueries({ queryKey: ["itam-assets-dashboard-full"] });
-    queryClient.invalidateQueries({ queryKey: ["itam-recent-checkins"] });
-    queryClient.invalidateQueries({ queryKey: ["itam-recent-checkouts"] });
-    queryClient.invalidateQueries({ queryKey: ["employee-asset-counts"] });
-    queryClient.invalidateQueries({ queryKey: ["employee-assets"] });
-    queryClient.invalidateQueries({ queryKey: ["asset-history"] });
-    queryClient.invalidateQueries({ queryKey: ["asset-events"] });
     onActionComplete?.();
   };
 

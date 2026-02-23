@@ -172,14 +172,14 @@ Use font-sans, font-serif, or font-display utility classes in Tailwind
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
     font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1;
-    overflow-x: hidden;
+    overflow: hidden;
     margin: 0;
     padding: 0;
     width: 100%;
   }
 
   html {
-    overflow-x: hidden;
+    overflow: hidden;
     margin: 0;
     padding: 0;
     width: 100%;
@@ -188,7 +188,8 @@ Use font-sans, font-serif, or font-display utility classes in Tailwind
 
   #root {
     width: 100%;
-    min-height: 100vh;
+    height: 100vh;
+    overflow: hidden;
     margin: 0;
     padding: 0;
   }

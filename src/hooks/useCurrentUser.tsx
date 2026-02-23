@@ -8,15 +8,7 @@ export interface CurrentUser {
   name: string | null;
   role: string | null;
   tenantId: number;
-  organisationId: string;
-  organisation: {
-    id: string;
-    name: string;
-  };
 }
-
-const DEFAULT_ORG_ID = 'single-company';
-const DEFAULT_ORG_NAME = 'RT-IT-Hub';
 
 /**
  * Simplified user data hook — reads from auth context + session store.
@@ -36,11 +28,6 @@ export function useCurrentUser() {
     name: storeName || user.user_metadata?.name || user.email?.split('@')[0] || null,
     role: storeRole,
     tenantId: 1,
-    organisationId: DEFAULT_ORG_ID,
-    organisation: {
-      id: DEFAULT_ORG_ID,
-      name: DEFAULT_ORG_NAME,
-    },
   } : null;
 
   return {

@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { useCurrentUser } from "@/hooks/useCurrentUser";
+
 import { useQuery } from "@tanstack/react-query";
 
 const formSchema = z.object({
@@ -32,8 +32,6 @@ interface AddPaymentDialogProps {
 
 export const AddPaymentDialog = ({ open, onOpenChange, onSuccess, editingPayment }: AddPaymentDialogProps) => {
   const { toast } = useToast();
-  const { data: currentUser } = useCurrentUser();
-  const organisationId = currentUser?.organisationId;
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Single-company mode: RLS handles access control, no org filter needed for reads
@@ -94,7 +92,6 @@ export const AddPaymentDialog = ({ open, onOpenChange, onSuccess, editingPayment
     setIsSubmitting(true);
     try {
       const paymentData = {
-        organisation_id: organisationId!,
         tool_id: values.tool_id,
         amount: parseFloat(values.amount),
         currency: values.currency,

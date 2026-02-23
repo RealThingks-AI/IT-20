@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { BackButton } from "@/components/BackButton";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +17,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { CalendarIcon, Search, UserCheck, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useOrganisationUsers } from "@/hooks/useOrganisationUsers";
+import { useOrganisationUsers } from "@/hooks/useUsers";
 import { getUserDisplayName } from "@/lib/userUtils";
 
 const CheckoutPage = () => {
@@ -134,12 +133,8 @@ const CheckoutPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="bg-background">
       <div className="p-4 space-y-4">
-        <div className="flex items-center gap-4">
-          <BackButton />
-          <h1 className="text-xl font-semibold">Check Out Assets</h1>
-        </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Asset Selection */}
           <Card className="lg:col-span-2">

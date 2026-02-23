@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { BackButton } from "@/components/BackButton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -167,12 +166,8 @@ export default function ListsPage() {
   const warrantyExpired = assetsWithWarranty.filter(a => getWarrantyStatus(a.warranty_expiry).status === "expired").length;
 
   return (
-    <div className="min-h-screen bg-background p-4">
-      <div className="max-w-7xl mx-auto space-y-4">
-        <div className="flex items-center gap-4">
-          <BackButton />
-          <h1 className="text-2xl font-bold">Asset Lists</h1>
-        </div>
+    <div className="bg-background p-4">
+      <div className="space-y-4">
 
         <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSearch(""); setStatusFilter("all"); }}>
           <ScrollArea className="w-full whitespace-nowrap">
@@ -198,7 +193,7 @@ export default function ListsPage() {
             <div className="grid grid-cols-3 gap-4">
               <Card>
                 <CardContent className="p-4 flex items-center gap-3">
-                  <div className="p-2 rounded-full bg-yellow-100">
+                   <div className="p-2 rounded-lg bg-yellow-100">
                     <Wrench className="h-5 w-5 text-yellow-600" />
                   </div>
                   <div>
@@ -209,7 +204,7 @@ export default function ListsPage() {
               </Card>
               <Card>
                 <CardContent className="p-4 flex items-center gap-3">
-                  <div className="p-2 rounded-full bg-blue-100">
+                  <div className="p-2 rounded-lg bg-blue-100">
                     <Wrench className="h-5 w-5 text-blue-600" />
                   </div>
                   <div>
@@ -220,7 +215,7 @@ export default function ListsPage() {
               </Card>
               <Card>
                 <CardContent className="p-4 flex items-center gap-3">
-                  <div className="p-2 rounded-full bg-green-100">
+                   <div className="p-2 rounded-lg bg-green-100">
                     <CheckCircle className="h-5 w-5 text-green-600" />
                   </div>
                   <div>
@@ -333,7 +328,7 @@ export default function ListsPage() {
             <div className="grid grid-cols-3 gap-4">
               <Card className="cursor-pointer" onClick={() => setStatusFilter("active")}>
                 <CardContent className="p-4 flex items-center gap-3">
-                  <div className="p-2 rounded-full bg-green-100">
+                   <div className="p-2 rounded-lg bg-green-100">
                     <CheckCircle className="h-5 w-5 text-green-600" />
                   </div>
                   <div>
@@ -344,7 +339,7 @@ export default function ListsPage() {
               </Card>
               <Card className="cursor-pointer" onClick={() => setStatusFilter("expiring")}>
                 <CardContent className="p-4 flex items-center gap-3">
-                  <div className="p-2 rounded-full bg-yellow-100">
+                   <div className="p-2 rounded-lg bg-yellow-100">
                     <AlertTriangle className="h-5 w-5 text-yellow-600" />
                   </div>
                   <div>
@@ -355,7 +350,7 @@ export default function ListsPage() {
               </Card>
               <Card className="cursor-pointer" onClick={() => setStatusFilter("expired")}>
                 <CardContent className="p-4 flex items-center gap-3">
-                  <div className="p-2 rounded-full bg-red-100">
+                  <div className="p-2 rounded-lg bg-red-100">
                     <Shield className="h-5 w-5 text-red-600" />
                   </div>
                   <div>

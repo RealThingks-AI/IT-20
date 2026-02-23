@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
-import { useOrganisationUsers } from "@/hooks/useOrganisationUsers";
+import { useOrganisationUsers } from "@/hooks/useUsers";
 
 interface AssignProblemDialogProps {
   open: boolean;

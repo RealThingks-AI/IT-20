@@ -29,7 +29,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { getUserDisplayName } from "@/lib/userUtils";
-import { useOrganisationUsers } from "@/hooks/useOrganisationUsers";
+import { useOrganisationUsers } from "@/hooks/useUsers";
 
 const assignSchema = z.object({
   assignee_id: z.string().min(1, "Please select an assignee"),

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { 
   Package, 
   UserCheck, 
@@ -16,7 +17,7 @@ import {
   LogIn,
   Calendar
 } from "lucide-react";
-import { BackButton } from "@/components/BackButton";
+import { getStatusLabel, getStatusBadgeColor } from "@/lib/assetStatusUtils";
 
 const ITAMDashboard = () => {
   const navigate = useNavigate();
@@ -76,7 +77,7 @@ const ITAMDashboard = () => {
     return warrantyDate <= thirtyDaysFromNow && warrantyDate >= new Date();
   }).length;
 
-  // Lease expiring soon (30 days) - stored in custom_fields
+  // Lease expiring soon (30 days)
   const expiringLease = assets.filter(a => {
     const customFields = a.custom_fields as Record<string, any> | null;
     const leaseExpiry = customFields?.lease_expiry;
@@ -141,19 +142,8 @@ const ITAMDashboard = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-background p-4">
-      <div className="max-w-7xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <BackButton />
-            <div>
-              <h1 className="text-3xl font-bold">IT Asset Management</h1>
-              <p className="text-muted-foreground">
-                Manage your organization's hardware, software, and licenses
-              </p>
-            </div>
-          </div>
-        </div>
+    <div className="bg-background p-4">
+      <div className="space-y-4">
 
         {/* KPI Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
@@ -177,20 +167,21 @@ const ITAMDashboard = () => {
 
         {/* Quick Actions */}
         <Card>
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-            <CardDescription>Common asset management tasks</CardDescription>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold">Quick Actions</CardTitle>
+            <CardDescription className="text-xs">Common asset management tasks</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
               {quickActions.map((action) => (
                 <Button
                   key={action.label}
                   variant="outline"
-                  className="flex flex-col items-center gap-2 h-auto py-4"
+                  size="sm"
+                  className="flex flex-col items-center gap-2 h-auto py-3"
                   onClick={action.onClick}
                 >
-                  <action.icon className="h-5 w-5" />
+                  <action.icon className="h-4 w-4" />
                   <span className="text-xs">{action.label}</span>
                 </Button>
               ))}
@@ -199,36 +190,31 @@ const ITAMDashboard = () => {
         </Card>
 
         {/* Recent Activity */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Card>
-            <CardHeader>
-              <CardTitle>Recent Assets</CardTitle>
-              <CardDescription>Latest additions to inventory</CardDescription>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold">Recent Assets</CardTitle>
+              <CardDescription className="text-xs">Latest additions to inventory</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {assets.slice(0, 5).map((asset) => (
                   <div
                     key={asset.id}
-                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent cursor-pointer"
+                    className="flex items-center justify-between p-2.5 border rounded-md hover:bg-accent cursor-pointer transition-colors"
                     onClick={() => navigate(`/assets/detail/${asset.id}`)}
                   >
-                    <div>
-                      <p className="font-medium">{asset.name}</p>
-                      <p className="text-sm text-muted-foreground">{asset.asset_tag || asset.asset_id}</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">{asset.name}</p>
+                      <p className="text-xs text-muted-foreground">{asset.asset_tag || asset.asset_id}</p>
                     </div>
-                    <span className={`text-xs px-2 py-1 rounded-full ${
-                      asset.status === "available" ? "bg-green-100 text-green-800" :
-                      asset.status === "in_use" ? "bg-blue-100 text-blue-800" :
-                      asset.status === "maintenance" ? "bg-yellow-100 text-yellow-800" :
-                      "bg-gray-100 text-gray-800"
-                    }`}>
-                      {asset.status === "in_use" ? "Checked Out" : asset.status}
-                    </span>
+                    <Badge variant="secondary" className={`text-xs shrink-0 ${getStatusBadgeColor(asset.status)}`}>
+                      {getStatusLabel(asset.status)}
+                    </Badge>
                   </div>
                 ))}
                 {assets.length === 0 && (
-                  <p className="text-center text-muted-foreground py-8">
+                  <p className="text-center text-muted-foreground py-8 text-sm">
                     No assets yet. Add your first asset to get started.
                   </p>
                 )}
@@ -237,33 +223,29 @@ const ITAMDashboard = () => {
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Active Repairs</CardTitle>
-              <CardDescription>Assets currently being serviced</CardDescription>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold">Active Repairs</CardTitle>
+              <CardDescription className="text-xs">Assets currently being serviced</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {repairs.slice(0, 5).map((repair) => (
                   <div
                     key={repair.id}
-                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent cursor-pointer"
+                    className="flex items-center justify-between p-2.5 border rounded-md hover:bg-accent cursor-pointer transition-colors"
                     onClick={() => navigate(`/assets/repairs/detail/${repair.id}`)}
                   >
-                    <div>
-                      <p className="font-medium">Repair #{repair.repair_number || repair.id}</p>
-                      <p className="text-sm text-muted-foreground">{repair.issue_description?.substring(0, 50)}...</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">Repair #{repair.repair_number || repair.id}</p>
+                      <p className="text-xs text-muted-foreground truncate">{repair.issue_description?.substring(0, 50)}</p>
                     </div>
-                    <span className={`text-xs px-2 py-1 rounded-full ${
-                      repair.status === "pending" ? "bg-gray-100 text-gray-800" :
-                      repair.status === "in_progress" ? "bg-blue-100 text-blue-800" :
-                      "bg-green-100 text-green-800"
-                    }`}>
-                      {repair.status}
-                    </span>
+                    <Badge variant={repair.status === "in_progress" ? "default" : "secondary"} className="text-xs shrink-0">
+                      {repair.status === "in_progress" ? "In Progress" : repair.status}
+                    </Badge>
                   </div>
                 ))}
                 {repairs.length === 0 && (
-                  <p className="text-center text-muted-foreground py-8">
+                  <p className="text-center text-muted-foreground py-8 text-sm">
                     No active repairs
                   </p>
                 )}

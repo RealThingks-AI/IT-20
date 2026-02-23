@@ -7,7 +7,6 @@ const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 
 interface CachedSession {
   role: AppRole;
-  permissions: Record<string, boolean>;
   name: string | null;
   email: string | null;
   userId: string;
@@ -17,7 +16,6 @@ interface CachedSession {
 
 interface SessionState {
   role: AppRole | null;
-  permissions: Record<string, boolean>;
   name: string | null;
   email: string | null;
   uiSettings: Record<string, any> | null;
@@ -53,7 +51,6 @@ function hydrateFromCache(): Partial<SessionState> {
     }
     return {
       role: cached.role,
-      permissions: cached.permissions,
       name: cached.name,
       email: cached.email,
       uiSettings: cached.uiSettings,
@@ -68,7 +65,6 @@ const hydrated = hydrateFromCache();
 
 export const useSessionStore = create<SessionState>((set, get) => ({
   role: hydrated.role ?? null,
-  permissions: hydrated.permissions ?? {},
   name: hydrated.name ?? null,
   email: hydrated.email ?? null,
   uiSettings: hydrated.uiSettings ?? null,
@@ -103,7 +99,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       if (result && result.role) {
         set({
           role: (result.role as AppRole),
-          permissions: result.permissions || {},
           name: result.name || null,
           email: result.email || null,
           uiSettings: result.ui_settings || null,
@@ -113,9 +108,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
         // Cache to localStorage for instant render on refresh
         try {
-          localStorage.setItem(CACHE_KEY, JSON.stringify({
+            localStorage.setItem(CACHE_KEY, JSON.stringify({
             role: result.role,
-            permissions: result.permissions,
             name: result.name,
             email: result.email,
             uiSettings: result.ui_settings,
@@ -134,10 +128,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   clear: () => {
-    set({ role: null, permissions: {}, name: null, email: null, uiSettings: null, status: "idle", retries: 0 });
+    set({ role: null, name: null, email: null, uiSettings: null, status: "idle", retries: 0 });
     try {
       localStorage.removeItem(CACHE_KEY);
-      localStorage.removeItem("page-permissions-cache");
     } catch { /* ignore */ }
   },
 }));

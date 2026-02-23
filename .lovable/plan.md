@@ -1,74 +1,100 @@
 
-# Fix Asset Column Settings + Compact List View
 
-## Root Cause Found
+# Import Peripheral Assets from Excel + Fix Build Error
 
-The column settings ARE being saved to the database correctly, but they are never read back. The bug is on **line 138 of `src/hooks/useUISettings.tsx`**:
+## Overview
 
-```ts
-const uiSettingsData = data?.preferences?.[0]?.ui_settings;
+Process the uploaded Excel file containing 53 employee rows with 3 peripheral types each (Headphones, Keyboards, Mice) to create individual asset records. Also fix the existing build error in `create-backup/index.ts`.
+
+## Data Analysis
+
+- **53 rows**, up to 3 assets per row (Headphone RT-HP-XXX, Mouse RT-MOU-XXX, Keyboard RT-KB-XXX)
+- **Skip rule**: Any entry where serial number OR asset tag is "NA" or empty
+- **Row 43 ("Stock")**: No email -- assets created as unassigned (status: available)
+- **Estimated**: ~130 records after NA exclusions
+
+## Fix 1: Build Error in create-backup/index.ts
+
+The Deno std library `encoding/hex.ts` at v0.224.0 no longer exports `encode`. Replace with the Web Crypto API approach or use `encodeHex` from the newer path.
+
+**File**: `supabase/functions/create-backup/index.ts` line 2
+
+Change:
+```typescript
+import { encode as hexEncode } from "https://deno.land/std@0.224.0/encoding/hex.ts";
+```
+To:
+```typescript
+import { encodeHex } from "https://deno.land/std@0.224.0/encoding/hex.ts";
+```
+Then update all usages of `hexEncode` to `encodeHex`.
+
+## Fix 2: Import Peripherals Function
+
+### File: `src/hooks/useAssetExportImport.tsx`
+
+Add a new `importPeripherals` function that:
+
+1. Parses the XLSX using existing `parseFileToRows`
+2. Fetches all users from the `users` table
+3. Applies the email alias map to resolve mismatched emails
+4. For each row, creates up to 3 asset records:
+   - **Headphone**: asset_tag from col 5, serial from col 4, category_id = `b74a9d25-2143-419f-945e-3a978c38fab0`
+   - **Mouse**: asset_tag from col 7, serial from col 6, category_id = `efff9267-49db-4dbe-a106-d4ee9f5e579b`
+   - **Keyboard**: asset_tag from col 9, serial from col 8, category_id = `8736a5f8-a761-49c1-be5d-8bb784614e3c`
+5. Skips any peripheral where serial or asset_tag is "NA" or empty
+6. Checks for duplicate asset_tag before inserting
+7. Sets status to `in_use` and `assigned_to` when email resolves; `available` for Stock row
+
+### Email Alias Map (hardcoded)
+
+```text
+palla.siva.prasad@realthingks.com -> siva.prasad@realthingks.com
+pranay.m@realthingks.com -> pranay.marchande@realthingks.com
+ramakrishna.t@realthingks.com -> ramakrishna.tondapu@realthingks.com
+sidharth.d@realthingks.com -> sidharth.dhammi@realthingks.com
+shraddha.n@realthingks.com -> shraddha.nandwadekar@realthingks.com
+vishal.s@realthingks.com -> vishal.srivastav@realthingks.com
 ```
 
-The Supabase query returns `preferences` as a **single object** (not an array) because `user_preferences` has a unique constraint on `user_id`, making it a 1-to-1 relationship. So `preferences[0]` returns `undefined`, and the code always falls back to default column settings.
+### File: `src/pages/helpdesk/assets/import-export.tsx`
 
-**Evidence**: The network response confirms this:
-```json
-{"id":"...","preferences":{"ui_settings":{"assetColumns":[...]}}}
-```
+Add a third tab "Peripherals" (or a section under Import) with:
+- File upload input for the peripheral Excel
+- Import button
+- Progress bar and results display
+- Explanation of expected format (Sr No, Name, Email, Headphone Serial, HP Tag, Mouse Serial, Mouse Tag, KB Serial, KB Tag)
 
-Accessing `preferences[0]` on an object returns `undefined`.
+## Files to Modify
 
----
-
-## Changes
-
-### Fix 1: Read settings correctly (`src/hooks/useUISettings.tsx`)
-
-**Line 138** - Change the data extraction to handle both object and array:
-
-```ts
-// Before (broken):
-const uiSettingsData = data?.preferences?.[0]?.ui_settings;
-
-// After (fixed):
-const prefs = data?.preferences;
-const uiSettingsData = Array.isArray(prefs)
-  ? prefs[0]?.ui_settings
-  : prefs?.ui_settings;
-```
-
-This single fix resolves the entire column settings issue - save, load, and real-time updates will all work.
-
-### Fix 2: Reduce list view font size, spacing, and padding (`src/components/helpdesk/assets/AssetsList.tsx`)
-
-- Table header text: add `text-xs` class
-- Table cell text: add `text-xs` class
-- Row height: reduce padding with `py-1` on cells
-- Status badge: reduce to `text-[10px] px-1.5 py-0`
-- Column min-widths: reduce by ~20% for tighter layout
-- Pagination text: already `text-xs`, keep as-is
-
-### Fix 3: Compact column settings dialog (`src/components/helpdesk/assets/AssetColumnSettings.tsx`)
-
-- Reduce checkbox row padding from `p-2` to `p-1.5`
-- Use `text-sm` for column labels (already used, keep)
-- Tighten ScrollArea height if needed
-
----
+| File | Change |
+|------|--------|
+| `supabase/functions/create-backup/index.ts` | Fix hex encode import (build error) |
+| `src/hooks/useAssetExportImport.tsx` | Add `importPeripherals()` with email alias map, dedup check, NA skip |
+| `src/pages/helpdesk/assets/import-export.tsx` | Add "Import Peripherals" tab/section with upload UI |
 
 ## Technical Details
 
-### Why the mutation appeared to work
-The `updateAssetColumns` mutation correctly:
-1. Saves to `user_preferences.ui_settings` via upsert
-2. Invalidates the `["user-settings-combined"]` query cache
-3. The query refetches fresh data from the DB
+### Asset Record Shape (per peripheral)
 
-But on refetch, the same broken line 138 extracts `undefined` again, so the table never updates.
+```typescript
+{
+  asset_tag: "RT-HP-001",
+  asset_id: "RT-HP-001",
+  name: "Headphones - Abhijeet Raj",
+  serial_number: "2328ALA06GT8",
+  category_id: "b74a9d25-...",
+  assigned_to: "<user_uuid>",
+  checked_out_to: "<user_uuid>",
+  checked_out_at: new Date().toISOString(),
+  status: "in_use",
+  is_active: true
+}
+```
 
-### Files to modify
-| File | Change |
-|------|--------|
-| `src/hooks/useUISettings.tsx` | Fix line 138 - handle object vs array for preferences |
-| `src/components/helpdesk/assets/AssetsList.tsx` | Add `text-xs` to cells, reduce padding, compact rows |
-| `src/components/helpdesk/assets/AssetColumnSettings.tsx` | Minor spacing tightening |
+For "Stock" row (no email): `status: "available"`, no `assigned_to`.
+
+### Duplicate Prevention
+
+Before each insert, check if `asset_tag` already exists in `itam_assets` (active). If it does, skip and log as "already exists".
+

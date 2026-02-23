@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { useOrganisationUsers } from "@/hooks/useOrganisationUsers";
+import { useOrganisationUsers } from "@/hooks/useUsers";
 import { getUserDisplayName } from "@/lib/userUtils";
 
 const AllocateLicense = () => {

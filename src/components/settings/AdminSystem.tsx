@@ -85,8 +85,7 @@ const TABLE_DISPLAY_NAMES: Record<string, string> = {
 
 export function AdminSystem() {
   const { data: currentUser, isLoading: userLoading } = useCurrentUser();
-  // Static organisation for single-company use
-  const organisation = currentUser?.organisation || { id: 'single-company', name: 'RT-IT-Hub' };
+  const companyName = 'RT-IT-Hub';
   const queryClient = useQueryClient();
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 
@@ -99,13 +98,11 @@ export function AdminSystem() {
   });
 
   useEffect(() => {
-    if (organisation) {
-      setSettings((prev) => ({
-        ...prev,
-        name: organisation.name || "",
-      }));
-    }
-  }, [organisation]);
+    setSettings((prev) => ({
+      ...prev,
+      name: companyName,
+    }));
+  }, []);
 
   // Fetch table statistics
   const { data: tableStats, isLoading: statsLoading, refetch: refetchStats } = useQuery({
@@ -446,20 +443,20 @@ export function AdminSystem() {
 
       {/* Organization Settings */}
       <SettingsCard
-        title="Organization Settings"
-        description="Configure your organization's basic information"
+        title="Company Settings"
+        description="Configure your company's basic information"
         icon={Building2}
       >
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="org-name">Organization Name</Label>
+            <Label htmlFor="org-name">Company Name</Label>
             <Input
               id="org-name"
               value={settings.name}
               onChange={(e) =>
                 setSettings((prev) => ({ ...prev, name: e.target.value }))
               }
-              placeholder="Enter organization name"
+              placeholder="Enter company name"
             />
           </div>
           <div className="space-y-2">
@@ -488,7 +485,7 @@ export function AdminSystem() {
       {/* Working Hours */}
       <SettingsCard
         title="Working Hours"
-        description="Define your organization's standard working hours for SLA calculations"
+        description="Define your company's standard working hours for SLA calculations"
         icon={Clock}
       >
         <div className="space-y-4">

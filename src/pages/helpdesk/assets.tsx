@@ -39,7 +39,7 @@ export default function HelpdeskAssets() {
   const metrics = useMemo(() => {
     const activeAssets = allAssets.filter((a: any) => a.status !== 'retired' && a.status !== 'disposed');
     const availableAssets = allAssets.filter((a: any) => a.status === 'available');
-    const maintenanceAssets = allAssets.filter((a: any) => a.status === 'in_repair');
+    const maintenanceAssets = allAssets.filter((a: any) => a.status === 'maintenance');
     const retiredAssets = allAssets.filter((a: any) => a.status === 'retired');
 
     // Recently added (last 30 days)
@@ -97,7 +97,7 @@ export default function HelpdeskAssets() {
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {/* Active Assets */}
-        <Card className="hover:shadow-sm transition-shadow cursor-pointer hover:border-primary/20" onClick={() => navigate("/assets/allassets?status=active")}>
+        <Card className="hover:shadow-sm transition-shadow cursor-pointer hover:border-primary/20" onClick={() => navigate("/assets/allassets")}>
           <CardContent className="p-3">
             <div className="flex items-start justify-between">
               <div className="flex-1">
@@ -143,7 +143,7 @@ export default function HelpdeskAssets() {
         </Card>
 
         {/* In Maintenance */}
-        <Card className="hover:shadow-sm transition-shadow cursor-pointer hover:border-primary/20" onClick={() => navigate("/assets/allassets?status=in_repair")}>
+        <Card className="hover:shadow-sm transition-shadow cursor-pointer hover:border-primary/20" onClick={() => navigate("/assets/allassets?status=maintenance")}>
           <CardContent className="p-3">
             <div className="flex items-start justify-between">
               <div className="flex-1">

@@ -90,7 +90,6 @@ export function CreateTicketForm({ onSearchChange }: CreateTicketFormProps) {
       // Generate ticket number per-tenant
       const { data: ticketNumber } = await supabase.rpc("generate_helpdesk_ticket_number", {
         p_tenant_id: tenantId,
-        p_org_id: null as any,
       });
 
       // Insert ticket

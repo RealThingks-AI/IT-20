@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { BackButton } from "@/components/BackButton";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -141,12 +140,8 @@ const CheckinPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="bg-background">
       <div className="p-4 space-y-4">
-        <div className="flex items-center gap-4">
-          <BackButton />
-          <h1 className="text-xl font-semibold">Check In Assets</h1>
-        </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Asset Selection */}
           <Card className="lg:col-span-2">

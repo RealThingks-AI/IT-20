@@ -1,6 +1,8 @@
-import { Outlet, useLocation } from "react-router-dom";
+import { Outlet, useLocation, Navigate } from "react-router-dom";
 import { HelpdeskSidebar } from "@/components/helpdesk/HelpdeskSidebar";
 import { NotificationPanel } from "@/components/NotificationPanel";
+import { useAuth } from "@/contexts/AuthContext";
+import { Loader2 } from "lucide-react";
 
 const routeTitles: Record<string, string> = {
   "/": "Dashboard",
@@ -26,14 +28,9 @@ const routeTitles: Record<string, string> = {
   "/assets/checkin": "Check In Asset",
   "/assets/dispose": "Dispose Asset",
   "/assets/reserve": "Reserve Asset",
-  "/assets/lists/maintenances": "Maintenance List",
-  "/assets/lists/warranties": "Warranty List",
-  "/assets/lists/contracts": "Contracts List",
-  "/assets/setup": "Asset Setup",
-  "/assets/setup/fields-setup": "Fields Setup",
-  "/assets/tools": "Asset Tools",
   "/assets/reports": "Asset Reports",
   "/assets/audit": "Asset Audit",
+  "/assets/advanced": "Asset Advanced",
   "/assets/explore/bulk-actions": "Bulk Actions",
   
   "/assets/repairs": "Repairs & Maintenance",
@@ -89,11 +86,19 @@ const pagesWithInlineHeader = [
   "/sla",
   "/queues",
   "/changes",
-  "/dashboard"
+  "/dashboard",
+  "/assets/allassets",
+  "/settings"
 ];
 
 const HelpdeskLayout = () => {
   const location = useLocation();
+  const { user, loading } = useAuth();
+
+  // Only redirect if we're certain there's no user (finished loading, no user)
+  if (!loading && !user) {
+    return <Navigate to="/login" replace />;
+  }
 
   // Handle dynamic routes
   let pageTitle = routeTitles[location.pathname] || "IT Helpdesk";
@@ -131,12 +136,12 @@ const HelpdeskLayout = () => {
       <HelpdeskSidebar />
 
       <main className="flex-1 h-screen flex flex-col bg-background overflow-hidden will-change-auto">
-        <header className="border-b px-4 flex items-center justify-between shrink-0 h-11">
-          <div id="helpdesk-header-left" className="flex items-center gap-3">
+        <header className="border-b px-4 flex items-center justify-between shrink-0 min-h-[2.75rem]">
+          <div id="helpdesk-header-left" className="flex items-center gap-3 flex-1 min-w-0">
             {showDefaultTitle && (
               <h1 className="text-sm font-semibold text-foreground">{pageTitle}</h1>
             )}
-            <div id="settings-header-portal" />
+            <div id="settings-header-portal" className="flex-shrink-0" />
           </div>
 
           <div className="flex items-center">
@@ -144,7 +149,7 @@ const HelpdeskLayout = () => {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-hidden">
           <Outlet />
         </div>
       </main>

@@ -6,7 +6,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { SidebarUserSection } from "./SidebarUserSection";
-import { useMultiplePageAccess } from "@/hooks/usePageAccess";
 import { useUserRole } from "@/hooks/useUserRole";
 
 interface SidebarChild {
@@ -35,10 +34,6 @@ const assetChildren: SidebarChild[] = [{
   title: "List of Assets",
   url: "/assets/allassets",
   icon: List
-}, {
-  title: "Reports",
-  url: "/assets/reports",
-  icon: BarChart3
 }, {
   title: "Advanced",
   url: "/assets/advanced",
@@ -138,29 +133,14 @@ export function HelpdeskSidebar() {
   const [expandedSections, setExpandedSections] = useState<string[]>([]);
   const { role } = useUserRole();
 
-  // Get all parent routes to check access
-  const parentRoutes = useMemo(() => sidebarSections.map(s => s.parentRoute), []);
-  const { accessMap, isLoading: accessLoading } = useMultiplePageAccess(parentRoutes);
-
-  // OPTIMISTIC: Show all sections immediately, filter only when permissions confirm denial
-  // This prevents the skeleton flash on navigation
+  // Role-based filtering — instant, no DB query
+  const OPEN_ROUTES = ["/", "/tickets", "/assets"];
   const filteredSections = useMemo(() => {
-    // Admins always see everything
     if (role === "admin") return sidebarSections;
-    
-    // If still loading and no cached data, show all sections (optimistic)
-    if (accessLoading && Object.keys(accessMap).length === 0) {
-      return sidebarSections;
-    }
-
-    // Filter based on confirmed permissions
-    return sidebarSections.filter(section => {
-      // If permission not yet loaded, show optimistically
-      if (!(section.parentRoute in accessMap)) return true;
-      // Otherwise use the actual permission
-      return accessMap[section.parentRoute] === true;
-    });
-  }, [role, accessMap, accessLoading]);
+    if (role === "manager") return sidebarSections; // managers see all except settings (handled separately)
+    // user/viewer: only open routes
+    return sidebarSections.filter(s => OPEN_ROUTES.includes(s.parentRoute));
+  }, [role]);
 
   // Auto-expand section when child route is active
   useEffect(() => {
@@ -192,7 +172,7 @@ export function HelpdeskSidebar() {
 
   const toggleSection = (title: string) => {
     setExpandedSections(prev => 
-      prev.includes(title) ? prev.filter(t => t !== title) : [...prev, title]
+      prev.includes(title) ? [] : [title]
     );
   };
 
@@ -220,7 +200,7 @@ export function HelpdeskSidebar() {
         {Icon && <Icon className="h-3 w-3 mr-2 flex-shrink-0" />}
         <span className="truncate">{subChild.title}</span>
         {subChild.badge !== undefined && subChild.badge > 0 && (
-          <span className="ml-auto bg-destructive text-destructive-foreground text-[10px] rounded-full px-1.5 min-w-[18px] text-center">
+          <span className="ml-auto bg-destructive text-destructive-foreground text-[10px] rounded-md px-1.5 min-w-[18px] text-center">
             {subChild.badge}
           </span>
         )}
@@ -250,7 +230,7 @@ export function HelpdeskSidebar() {
               {Icon && <Icon className="h-3 w-3 mr-2 flex-shrink-0" />}
               <span className="flex-1 text-left truncate">{child.title}</span>
               {child.badge !== undefined && child.badge > 0 && (
-                <span className="mr-1 bg-destructive text-destructive-foreground text-[10px] rounded-full px-1.5 min-w-[18px] text-center">
+                <span className="mr-1 bg-destructive text-destructive-foreground text-[10px] rounded-md px-1.5 min-w-[18px] text-center">
                   {child.badge}
                 </span>
               )}
@@ -282,7 +262,7 @@ export function HelpdeskSidebar() {
         {Icon && <Icon className="h-3 w-3 mr-2 flex-shrink-0" />}
         <span className="truncate">{child.title}</span>
         {child.badge !== undefined && child.badge > 0 && (
-          <span className="ml-auto bg-destructive text-destructive-foreground text-[10px] rounded-full px-1.5 min-w-[18px] text-center">
+          <span className="ml-auto bg-destructive text-destructive-foreground text-[10px] rounded-md px-1.5 min-w-[18px] text-center">
             {child.badge}
           </span>
         )}
@@ -360,7 +340,7 @@ export function HelpdeskSidebar() {
             </div>
             <span className="flex-1 text-left truncate">{section.title}</span>
             {section.badge !== undefined && section.badge > 0 && (
-              <span className="mr-1 bg-destructive text-destructive-foreground text-[10px] rounded-full px-1.5 min-w-[18px] text-center">
+              <span className="mr-1 bg-destructive text-destructive-foreground text-[10px] rounded-md px-1.5 min-w-[18px] text-center">
                 {section.badge}
               </span>
             )}

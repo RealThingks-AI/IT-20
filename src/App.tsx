@@ -5,11 +5,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
-import { OrganisationProvider } from "./contexts/OrganisationContext";
 import { SystemSettingsProvider } from "./contexts/SystemSettingsContext";
-import { ProtectedRoute } from "./components/ProtectedRoute";
-import { RoleProtectedRoute } from "./components/RoleProtectedRoute";
-import { PageProtectedRoute } from "./components/PageProtectedRoute";
+
 
 // Eagerly loaded (small, critical components)
 import NotFound from "./pages/NotFound";
@@ -39,13 +36,14 @@ const TicketDetail = lazy(() => import("./pages/helpdesk/tickets/[id]"));
 const HelpdeskProblemDetail = lazy(() => import("./pages/helpdesk/problems/[id]"));
 const AssignmentRules = lazy(() => import("./pages/helpdesk/tickets/assignment-rules"));
 
-// Lazy loaded - Assets
-const HelpdeskAssets = lazy(() => import("./pages/helpdesk/assets"));
+// Eagerly loaded - Assets (frequently visited)
+import HelpdeskAssets from "./pages/helpdesk/assets";
+import AllAssets from "./pages/helpdesk/assets/allassets";
+import AssetDashboard from "./pages/helpdesk/assets/dashboard";
+
+// Lazy loaded - Assets (less frequent)
 const AssetDetail = lazy(() => import("./pages/helpdesk/assets/detail/[assetId]"));
 const AssetReports = lazy(() => import("./pages/helpdesk/assets/reports"));
-const AllAssets = lazy(() => import("./pages/helpdesk/assets/allassets"));
-// AssetSetup removed - consolidated into Advanced page
-const AssetDashboard = lazy(() => import("./pages/helpdesk/assets/dashboard"));
 const AssetAlerts = lazy(() => import("./pages/helpdesk/assets/alerts/index"));
 const AssetCheckout = lazy(() => import("./pages/helpdesk/assets/checkout"));
 const AssetCheckin = lazy(() => import("./pages/helpdesk/assets/checkin"));
@@ -55,7 +53,7 @@ const AddAsset = lazy(() => import("./pages/helpdesk/assets/add"));
 const MaintenancesList = lazy(() => import("./pages/helpdesk/assets/lists/index"));
 // Warranties list now handled by advanced page
 // ContractsList removed - functionality moved to /assets/advanced
-const AssetAdvancedPage = lazy(() => import("./pages/helpdesk/assets/advanced/index"));
+import AssetAdvancedPage from "./pages/helpdesk/assets/advanced/index";
 const DepreciationDashboard = lazy(() => import("./pages/helpdesk/assets/depreciation/index"));
 const VendorsList = lazy(() => import("./pages/helpdesk/assets/vendors/index"));
 const AddVendor = lazy(() => import("./pages/helpdesk/assets/vendors/add-vendor"));
@@ -92,7 +90,7 @@ const SystemUpdatesUpdates = lazy(() => import("./pages/helpdesk/system-updates/
 // Lazy loaded - Other Modules
 const HelpdeskChanges = lazy(() => import("./pages/helpdesk/changes"));
 // HelpdeskAdmin removed - deprecated, redirecting to /settings
-const HelpdeskSettings = lazy(() => import("./pages/helpdesk/settings"));
+import HelpdeskSettings from "./pages/helpdesk/settings";
 const AccountSettings = lazy(() => import("./pages/helpdesk/account"));
 const HelpdeskReports = lazy(() => import("./pages/helpdesk/reports"));
 const HelpdeskMonitoring = lazy(() => import("./pages/helpdesk/monitoring"));
@@ -112,7 +110,7 @@ const Status = lazy(() => import("./pages/Status"));
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 2 * 60 * 1000,       // 2 minutes default
+      staleTime: 5 * 60 * 1000,       // 5 minutes default
       gcTime: 10 * 60 * 1000,         // 10 minutes cache retention
       refetchOnWindowFocus: false,    // Don't refetch on tab switch
       refetchOnMount: false,          // Use cache on mount
@@ -129,7 +127,6 @@ const App = () => {
         <Sonner />
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <AuthProvider>
-            <OrganisationProvider>
               <SystemSettingsProvider>
                 <Suspense fallback={<PageLoader />}>
                   <Routes>
@@ -143,22 +140,22 @@ const App = () => {
                     <Route path="/status" element={<Status />} />
 
                     {/* Profile */}
-                    <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-                    <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
+                    <Route path="/profile" element={<Profile />} />
+                    <Route path="/notifications" element={<Notifications />} />
 
                     {/* Main App Routes - All under root */}
-                    <Route path="/" element={<ProtectedRoute><HelpdeskLayout /></ProtectedRoute>}>
+                    <Route path="/" element={<HelpdeskLayout />}>
                       <Route index element={<HelpdeskDashboard />} />
                       
                       {/* Tickets */}
                       <Route path="tickets" element={<TicketsDashboard />} />
                       <Route path="tickets/list" element={<TicketsList />} />
                       <Route path="tickets/problems" element={<ProblemsPage />} />
-                      <Route path="tickets/settings" element={<RoleProtectedRoute allowedRoles={["admin"]}><TicketSettings /></RoleProtectedRoute>} />
+                      <Route path="tickets/settings" element={<TicketSettings />} />
                       <Route path="tickets/reports" element={<TicketReports />} />
                       <Route path="tickets/archive" element={<ClosedArchive />} />
                       <Route path="tickets/create" element={<CreateTicket />} />
-                      <Route path="tickets/assignment-rules" element={<RoleProtectedRoute allowedRoles={["admin"]}><AssignmentRules /></RoleProtectedRoute>} />
+                      <Route path="tickets/assignment-rules" element={<AssignmentRules />} />
                       <Route path="tickets/:id" element={<TicketDetail />} />
                       <Route path="problems" element={<Navigate to="/tickets/problems" replace />} />
                       <Route path="problems/:id" element={<HelpdeskProblemDetail />} />
@@ -179,11 +176,11 @@ const App = () => {
                       <Route path="assets/lists/contracts" element={<Navigate to="/assets/advanced?tab=employees" replace />} />
                       <Route path="assets/advanced" element={<AssetAdvancedPage />} />
                       <Route path="assets/detail/:assetId" element={<AssetDetail />} />
-                      <Route path="assets/reports" element={<RoleProtectedRoute allowedRoles={["admin", "manager"]}><AssetReports /></RoleProtectedRoute>} />
+                      <Route path="assets/reports" element={<AssetReports />} />
                       <Route path="assets/tools" element={<Navigate to="/assets/advanced?tab=tools" replace />} />
                       <Route path="assets/import-export" element={<AssetsImportExport />} />
                       <Route path="assets/setup" element={<Navigate to="/assets/advanced?tab=setup" replace />} />
-                      <Route path="assets/depreciation" element={<RoleProtectedRoute allowedRoles={["admin", "manager"]}><DepreciationDashboard /></RoleProtectedRoute>} />
+                      <Route path="assets/depreciation" element={<DepreciationDashboard />} />
                       <Route path="assets/vendors" element={<VendorsList />} />
                       <Route path="assets/vendors/add-vendor" element={<AddVendor />} />
                       <Route path="assets/vendors/detail/:vendorId" element={<VendorDetail />} />
@@ -203,7 +200,7 @@ const App = () => {
                       
                       
                       {/* Subscription - Database-driven access control */}
-                      <Route path="subscription" element={<PageProtectedRoute route="/subscription"><HelpdeskSubscriptionLayout /></PageProtectedRoute>}>
+                      <Route path="subscription" element={<HelpdeskSubscriptionLayout />}>
                         <Route index element={<HelpdeskSubscriptionDashboard />} />
                         <Route path="tools" element={<HelpdeskSubscriptionTools />} />
                         <Route path="vendors" element={<HelpdeskSubscriptionVendors />} />
@@ -212,24 +209,23 @@ const App = () => {
                       </Route>
                       
                       {/* System Updates - Database-driven access control */}
-                      <Route path="system-updates" element={<PageProtectedRoute route="/system-updates"><HelpdeskSystemUpdates /></PageProtectedRoute>} />
-                      <Route path="system-updates/settings" element={<RoleProtectedRoute allowedRoles={["admin"]}><SystemUpdatesSettings /></RoleProtectedRoute>} />
-                      <Route path="system-updates/devices" element={<PageProtectedRoute route="/system-updates"><SystemUpdatesDevices /></PageProtectedRoute>} />
-                      <Route path="system-updates/updates" element={<PageProtectedRoute route="/system-updates"><SystemUpdatesUpdates /></PageProtectedRoute>} />
+                      <Route path="system-updates" element={<HelpdeskSystemUpdates />} />
+                      <Route path="system-updates/settings" element={<SystemUpdatesSettings />} />
+                      <Route path="system-updates/devices" element={<SystemUpdatesDevices />} />
+                      <Route path="system-updates/updates" element={<SystemUpdatesUpdates />} />
                       
                       {/* Other Modules - Database-driven access control */}
-                      <Route path="monitoring" element={<PageProtectedRoute route="/monitoring"><HelpdeskMonitoring /></PageProtectedRoute>} />
+                      <Route path="monitoring" element={<HelpdeskMonitoring />} />
                       <Route path="reports" element={<Navigate to="/settings?section=reports" replace />} />
                       <Route path="audit" element={<Navigate to="/settings?section=audit" replace />} />
                       <Route path="changes" element={<HelpdeskChanges />} />
                       
                       {/* Admin-only routes (keep hardcoded for security) */}
-                      <Route path="sla" element={<RoleProtectedRoute allowedRoles={["admin"]}><HelpdeskSLA /></RoleProtectedRoute>} />
-                      <Route path="queues" element={<RoleProtectedRoute allowedRoles={["admin"]}><HelpdeskQueues /></RoleProtectedRoute>} />
-                      <Route path="automation" element={<RoleProtectedRoute allowedRoles={["admin"]}><HelpdeskAutomation /></RoleProtectedRoute>} />
-                      <Route path="tickets/assignment-rules" element={<RoleProtectedRoute allowedRoles={["admin"]}><AssignmentRules /></RoleProtectedRoute>} />
+                      <Route path="sla" element={<HelpdeskSLA />} />
+                      <Route path="queues" element={<HelpdeskQueues />} />
+                      <Route path="automation" element={<HelpdeskAutomation />} />
                       <Route path="admin" element={<Navigate to="/settings?section=users" replace />} />
-                      <Route path="settings" element={<PageProtectedRoute route="/settings"><HelpdeskSettings /></PageProtectedRoute>} />
+                      <Route path="settings" element={<HelpdeskSettings />} />
                       
                       {/* Account - All authenticated users */}
                       <Route path="account" element={<AccountSettings />} />
@@ -240,7 +236,6 @@ const App = () => {
                   </Routes>
                 </Suspense>
               </SystemSettingsProvider>
-            </OrganisationProvider>
           </AuthProvider>
         </BrowserRouter>
       </TooltipProvider>

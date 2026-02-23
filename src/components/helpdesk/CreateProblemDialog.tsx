@@ -135,7 +135,6 @@ export const CreateProblemDialog = ({
         "generate_problem_number",
         {
           p_tenant_id: tenantId,
-          p_org_id: null as any,
         }
       );
 
