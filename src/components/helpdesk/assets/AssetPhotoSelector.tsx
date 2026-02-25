@@ -53,30 +53,49 @@ export function AssetPhotoSelector({
   const fetchPhotos = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.storage.from(bucket).list("", {
-        limit: 100,
-        offset: 0,
-        sortBy: { column: "created_at", order: "desc" },
-      });
+      const imageExtensions = ["jpg", "jpeg", "png", "gif", "webp"];
+      const allPhotos: { name: string; url: string }[] = [];
+      const seenUrls = new Set<string>();
 
-      if (error) throw error;
-
-      const photoList = (data || [])
-        .filter((file: StorageFile) => {
-          const ext = file.name.toLowerCase().split(".").pop();
-          return ["jpg", "jpeg", "png", "gif", "webp"].includes(ext || "");
-        })
-        .map((file: StorageFile) => {
-          const { data: urlData } = supabase.storage
-            .from(bucket)
-            .getPublicUrl(file.name);
-          return {
-            name: file.name,
-            url: urlData.publicUrl,
-          };
+      const addPhotosFromPath = async (path: string) => {
+        const { data, error } = await supabase.storage.from(bucket).list(path, {
+          limit: 200,
+          sortBy: { column: "created_at", order: "desc" },
         });
+        if (error || !data) return;
 
-      setPhotos(photoList);
+        for (const file of data) {
+          if (file.name === ".emptyFolderPlaceholder") continue;
+          const ext = file.name.toLowerCase().split(".").pop();
+          if (!imageExtensions.includes(ext || "")) continue;
+
+          const fullPath = path ? `${path}/${file.name}` : file.name;
+          const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(fullPath);
+          if (!seenUrls.has(urlData.publicUrl)) {
+            seenUrls.add(urlData.publicUrl);
+            allPhotos.push({ name: file.name, url: urlData.publicUrl });
+          }
+        }
+      };
+
+      // List root-level images
+      await addPhotosFromPath("");
+
+      // List migrated/ folder
+      await addPhotosFromPath("migrated");
+
+      // Discover and list other subfolders (asset ID folders, etc.)
+      const { data: rootItems } = await supabase.storage.from(bucket).list("", {
+        limit: 100,
+      });
+      if (rootItems) {
+        const folders = rootItems.filter(
+          (item: StorageFile) => item.id === null && item.name !== "migrated"
+        );
+        await Promise.all(folders.map((folder: StorageFile) => addPhotosFromPath(folder.name)));
+      }
+
+      setPhotos(allPhotos);
     } catch (error) {
       console.error("Error fetching photos:", error);
       toast.error("Failed to load photos from storage");
