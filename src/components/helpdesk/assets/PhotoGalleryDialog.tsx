@@ -30,7 +30,7 @@ export function PhotoGalleryDialog() {
   const { data: assetPhotos, refetch: refetchPhotos } = useQuery({
     queryKey: ["asset-photos-storage"],
     queryFn: async () => {
-      // First get all distinct photo_urls from the database (already deduplicated)
+      // Only query distinct photo_urls from the database (source of truth)
       const { data: assets } = await supabase
         .from("itam_assets")
         .select("custom_fields")
@@ -45,14 +45,11 @@ export function PhotoGalleryDialog() {
         for (const asset of assets) {
           const photoUrl = (asset.custom_fields as Record<string, unknown>)?.photo_url as string | undefined;
           if (!photoUrl || seenUrls.has(photoUrl)) continue;
-          // Only include Supabase storage URLs (skip external)
           if (!photoUrl.includes("supabase") && !photoUrl.includes("storage")) continue;
           seenUrls.add(photoUrl);
 
-          // Extract filename from URL
           const parts = photoUrl.split("/");
           const name = parts[parts.length - 1] || "unknown";
-          // Reconstruct path from URL (after /asset-photos/)
           const bucketIdx = photoUrl.indexOf("/asset-photos/");
           const path = bucketIdx >= 0 ? photoUrl.substring(bucketIdx + "/asset-photos/".length) : `migrated/${name}`;
 
@@ -66,49 +63,11 @@ export function PhotoGalleryDialog() {
         }
       }
 
-      // Also scan storage for any orphaned images not yet linked to assets
-      const storagePhotos = await scanStorageFolder("migrated");
-      for (const sp of storagePhotos) {
-        if (!seenUrls.has(sp.photo_url)) {
-          seenUrls.add(sp.photo_url);
-          dbPhotos.push(sp);
-        }
-      }
-
       return dbPhotos;
     },
   });
 
-  async function scanStorageFolder(prefix: string): Promise<AssetPhoto[]> {
-    const results: AssetPhoto[] = [];
-    const { data, error } = await supabase.storage
-      .from("asset-photos")
-      .list(prefix, { limit: 1000, sortBy: { column: "created_at", order: "desc" } });
-    if (error || !data) return results;
-
-    for (const item of data) {
-      if (item.name === ".emptyFolderPlaceholder") continue;
-      const fullPath = prefix ? `${prefix}/${item.name}` : item.name;
-      if (item.id === null) {
-        const nested = await scanStorageFolder(fullPath);
-        results.push(...nested);
-        continue;
-      }
-      const ext = item.name.toLowerCase().split(".").pop();
-      if (!ext || !IMAGE_EXTENSIONS.includes(ext)) continue;
-      const { data: { publicUrl } } = supabase.storage.from("asset-photos").getPublicUrl(fullPath);
-      if (publicUrl) {
-        results.push({
-          id: item.id ?? fullPath,
-          name: item.name,
-          path: fullPath,
-          photo_url: publicUrl,
-          created_at: item.created_at,
-        });
-      }
-    }
-    return results;
-  }
+  // Storage scanning removed — DB is the sole source of truth for photos
 
   const uploadPhotoMutation = useMutation({
     mutationFn: async (file: File) => {
