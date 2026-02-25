@@ -53,46 +53,44 @@ export function AssetPhotoSelector({
   const fetchPhotos = async () => {
     setIsLoading(true);
     try {
-      const imageExtensions = ["jpg", "jpeg", "png", "gif", "webp"];
       const allPhotos: { name: string; url: string }[] = [];
       const seenUrls = new Set<string>();
 
-      const addPhotosFromPath = async (path: string) => {
-        const { data, error } = await supabase.storage.from(bucket).list(path, {
-          limit: 200,
-          sortBy: { column: "created_at", order: "desc" },
-        });
-        if (error || !data) return;
+      // 1. Get all unique photo_urls from assets in the database
+      const { data: assets } = await supabase
+        .from("itam_assets")
+        .select("custom_fields")
+        .eq("is_active", true)
+        .not("custom_fields->photo_url", "is", null);
 
-        for (const file of data) {
+      if (assets) {
+        for (const asset of assets) {
+          const photoUrl = (asset.custom_fields as any)?.photo_url;
+          if (photoUrl && typeof photoUrl === "string" && photoUrl.trim() && !seenUrls.has(photoUrl)) {
+            seenUrls.add(photoUrl);
+            const name = photoUrl.split("/").pop() || "image";
+            allPhotos.push({ name, url: photoUrl });
+          }
+        }
+      }
+
+      // 2. Also list root-level uploads (not yet assigned to any asset)
+      const imageExtensions = ["jpg", "jpeg", "png", "gif", "webp"];
+      const { data: rootFiles } = await supabase.storage.from(bucket).list("", {
+        limit: 100,
+        sortBy: { column: "created_at", order: "desc" },
+      });
+      if (rootFiles) {
+        for (const file of rootFiles) {
           if (file.name === ".emptyFolderPlaceholder") continue;
           const ext = file.name.toLowerCase().split(".").pop();
           if (!imageExtensions.includes(ext || "")) continue;
-
-          const fullPath = path ? `${path}/${file.name}` : file.name;
-          const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(fullPath);
+          const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(file.name);
           if (!seenUrls.has(urlData.publicUrl)) {
             seenUrls.add(urlData.publicUrl);
             allPhotos.push({ name: file.name, url: urlData.publicUrl });
           }
         }
-      };
-
-      // List root-level images
-      await addPhotosFromPath("");
-
-      // List migrated/ folder
-      await addPhotosFromPath("migrated");
-
-      // Discover and list other subfolders (asset ID folders, etc.)
-      const { data: rootItems } = await supabase.storage.from(bucket).list("", {
-        limit: 100,
-      });
-      if (rootItems) {
-        const folders = rootItems.filter(
-          (item: StorageFile) => item.id === null && item.name !== "migrated"
-        );
-        await Promise.all(folders.map((folder: StorageFile) => addPhotosFromPath(folder.name)));
       }
 
       setPhotos(allPhotos);
@@ -263,7 +261,7 @@ export function AssetPhotoSelector({
               <div className="grid grid-cols-5 gap-3">
                 {filteredPhotos.map((photo) => (
                   <button
-                    key={photo.name}
+                    key={photo.url}
                     type="button"
                     onClick={() => setTempSelectedUrl(photo.url)}
                     className={cn(
