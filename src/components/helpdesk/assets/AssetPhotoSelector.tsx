@@ -55,8 +55,27 @@ export function AssetPhotoSelector({
     try {
       const allPhotos: { name: string; url: string }[] = [];
       const seenUrls = new Set<string>();
+      const imageExtensions = ["jpg", "jpeg", "png", "gif", "webp"];
 
-      // 1. Get all unique photo_urls from assets in the database
+      // 1. List all images from migrated/ folder (primary source)
+      const { data: migratedFiles } = await supabase.storage.from(bucket).list("migrated", {
+        limit: 500,
+        sortBy: { column: "created_at", order: "desc" },
+      });
+      if (migratedFiles) {
+        for (const file of migratedFiles) {
+          if (file.name === ".emptyFolderPlaceholder") continue;
+          const ext = file.name.toLowerCase().split(".").pop();
+          if (!imageExtensions.includes(ext || "")) continue;
+          const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(`migrated/${file.name}`);
+          if (!seenUrls.has(urlData.publicUrl)) {
+            seenUrls.add(urlData.publicUrl);
+            allPhotos.push({ name: file.name, url: urlData.publicUrl });
+          }
+        }
+      }
+
+      // 2. Also include any DB-referenced photo_urls not already seen
       const { data: assets } = await supabase
         .from("itam_assets")
         .select("custom_fields")
@@ -70,25 +89,6 @@ export function AssetPhotoSelector({
             seenUrls.add(photoUrl);
             const name = photoUrl.split("/").pop() || "image";
             allPhotos.push({ name, url: photoUrl });
-          }
-        }
-      }
-
-      // 2. Also list root-level uploads (not yet assigned to any asset)
-      const imageExtensions = ["jpg", "jpeg", "png", "gif", "webp"];
-      const { data: rootFiles } = await supabase.storage.from(bucket).list("", {
-        limit: 100,
-        sortBy: { column: "created_at", order: "desc" },
-      });
-      if (rootFiles) {
-        for (const file of rootFiles) {
-          if (file.name === ".emptyFolderPlaceholder") continue;
-          const ext = file.name.toLowerCase().split(".").pop();
-          if (!imageExtensions.includes(ext || "")) continue;
-          const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(file.name);
-          if (!seenUrls.has(urlData.publicUrl)) {
-            seenUrls.add(urlData.publicUrl);
-            allPhotos.push({ name: file.name, url: urlData.publicUrl });
           }
         }
       }
@@ -120,16 +120,17 @@ export function AssetPhotoSelector({
     try {
       const fileExt = file.name.split(".").pop();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const filePath = `migrated/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
         .from(bucket)
-        .upload(fileName, file);
+        .upload(filePath, file);
 
       if (uploadError) throw uploadError;
 
       const { data: urlData } = supabase.storage
         .from(bucket)
-        .getPublicUrl(fileName);
+        .getPublicUrl(filePath);
 
       // Add to photos list and auto-select
       setPhotos((prev) => [{ name: fileName, url: urlData.publicUrl }, ...prev]);
