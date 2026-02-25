@@ -26,48 +26,89 @@ export function PhotoGalleryDialog() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [deletePhotoConfirm, setDeletePhotoConfirm] = useState<AssetPhoto | null>(null);
 
+  // Query distinct photo_urls from itam_assets to get deduplicated list
   const { data: assetPhotos, refetch: refetchPhotos } = useQuery({
     queryKey: ["asset-photos-storage"],
     queryFn: async () => {
-      const allPhotos: AssetPhoto[] = [];
+      // First get all distinct photo_urls from the database (already deduplicated)
+      const { data: assets } = await supabase
+        .from("itam_assets")
+        .select("custom_fields")
+        .eq("is_active", true)
+        .not("custom_fields->>photo_url", "is", null)
+        .limit(1000);
+
       const seenUrls = new Set<string>();
+      const dbPhotos: AssetPhoto[] = [];
 
-      const addPhotosFromPath = async (prefix: string): Promise<void> => {
-        const { data, error } = await supabase.storage
-          .from("asset-photos")
-          .list(prefix, { limit: 1000, sortBy: { column: "created_at", order: "desc" } });
-        if (error || !data) return;
+      if (assets) {
+        for (const asset of assets) {
+          const photoUrl = (asset.custom_fields as Record<string, unknown>)?.photo_url as string | undefined;
+          if (!photoUrl || seenUrls.has(photoUrl)) continue;
+          // Only include Supabase storage URLs (skip external)
+          if (!photoUrl.includes("supabase") && !photoUrl.includes("storage")) continue;
+          seenUrls.add(photoUrl);
 
-        await Promise.all(
-          data.map(async (item) => {
-            if (item.name === ".emptyFolderPlaceholder") return;
-            const fullPath = prefix ? `${prefix}/${item.name}` : item.name;
-            // Folder entries have id === null
-            if (item.id === null) {
-              await addPhotosFromPath(fullPath);
-              return;
-            }
-            const ext = item.name.toLowerCase().split(".").pop();
-            if (!ext || !IMAGE_EXTENSIONS.includes(ext)) return;
-            const { data: { publicUrl } } = supabase.storage.from("asset-photos").getPublicUrl(fullPath);
-            if (publicUrl && !seenUrls.has(publicUrl)) {
-              seenUrls.add(publicUrl);
-              allPhotos.push({
-                id: item.id ?? fullPath,
-                name: item.name,
-                path: fullPath,
-                photo_url: publicUrl,
-                created_at: item.created_at,
-              });
-            }
-          })
-        );
-      };
+          // Extract filename from URL
+          const parts = photoUrl.split("/");
+          const name = parts[parts.length - 1] || "unknown";
+          // Reconstruct path from URL (after /asset-photos/)
+          const bucketIdx = photoUrl.indexOf("/asset-photos/");
+          const path = bucketIdx >= 0 ? photoUrl.substring(bucketIdx + "/asset-photos/".length) : `migrated/${name}`;
 
-      await addPhotosFromPath("migrated");
-      return allPhotos;
+          dbPhotos.push({
+            id: photoUrl,
+            name: decodeURIComponent(name),
+            path,
+            photo_url: photoUrl,
+            created_at: null,
+          });
+        }
+      }
+
+      // Also scan storage for any orphaned images not yet linked to assets
+      const storagePhotos = await scanStorageFolder("migrated");
+      for (const sp of storagePhotos) {
+        if (!seenUrls.has(sp.photo_url)) {
+          seenUrls.add(sp.photo_url);
+          dbPhotos.push(sp);
+        }
+      }
+
+      return dbPhotos;
     },
   });
+
+  async function scanStorageFolder(prefix: string): Promise<AssetPhoto[]> {
+    const results: AssetPhoto[] = [];
+    const { data, error } = await supabase.storage
+      .from("asset-photos")
+      .list(prefix, { limit: 1000, sortBy: { column: "created_at", order: "desc" } });
+    if (error || !data) return results;
+
+    for (const item of data) {
+      if (item.name === ".emptyFolderPlaceholder") continue;
+      const fullPath = prefix ? `${prefix}/${item.name}` : item.name;
+      if (item.id === null) {
+        const nested = await scanStorageFolder(fullPath);
+        results.push(...nested);
+        continue;
+      }
+      const ext = item.name.toLowerCase().split(".").pop();
+      if (!ext || !IMAGE_EXTENSIONS.includes(ext)) continue;
+      const { data: { publicUrl } } = supabase.storage.from("asset-photos").getPublicUrl(fullPath);
+      if (publicUrl) {
+        results.push({
+          id: item.id ?? fullPath,
+          name: item.name,
+          path: fullPath,
+          photo_url: publicUrl,
+          created_at: item.created_at,
+        });
+      }
+    }
+    return results;
+  }
 
   const uploadPhotoMutation = useMutation({
     mutationFn: async (file: File) => {
@@ -132,7 +173,7 @@ export function PhotoGalleryDialog() {
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-4">
               {assetPhotos?.map((photo) => (
-                <div key={photo.path} className="relative group">
+                <div key={photo.photo_url} className="relative group">
                   <div className="aspect-square rounded-lg overflow-hidden bg-muted">
                     <img src={photo.photo_url} alt={photo.name} className="w-full h-full object-cover hover:scale-110 transition-transform" onError={(e) => { e.currentTarget.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Crect fill="%23ddd" width="100" height="100"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="%23999"%3ENo Image%3C/text%3E%3C/svg%3E'; }} />
                   </div>
