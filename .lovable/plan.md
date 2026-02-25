@@ -1,65 +1,73 @@
 
 
-# Fix Duplicate Images: Full Storage Cleanup + Content Deduplication
+# Fix: Remove Duplicate Photos (425 → Under 100)
 
-## Investigation Findings
+## Root Cause Analysis
 
-The database reveals the root cause clearly:
-- **Many assets still reference external assettiger.com URLs** (not yet migrated). The original migration ran but didn't update all assets.
-- **Multiple assets share the same source photo** (e.g., 83 assets share one image, 75 share another). When the migration ran, it may have created separate storage files for images that were already migrated.
-- The `migrated/` folder contains multiple files with identical visual content but different UUID-based filenames.
+The database confirms the duplication:
+- **322 assets** have a `photo_url` set
+- Only **112 distinct URLs** exist in the DB
+- Only **103 truly unique original images** (by `original_photo_url`)
+- The gallery shows **425** because it also scans storage for "orphaned" files — these orphans ARE the old duplicates that were never cleaned up
+- 15 assets still point to external `assettiger.com` URLs
 
-This means the gallery shows the same image multiple times because multiple storage files exist with identical content.
+The 425 count = 112 DB-referenced URLs + ~313 orphaned storage files (old duplicates with UUID filenames that the dedup edge function didn't finish cleaning because it timed out).
 
-## Solution: Edge Function for Content-Based Deduplication
+## Plan
 
-Since you want full storage cleanup with visual similarity, I will create an edge function that:
+### 1. Fix the edge function to work in batches (avoid timeout)
 
-1. Lists all files in the `migrated/` folder
-2. Downloads each file and computes a SHA-256 content hash
-3. Groups files by hash (identical content = same hash)
-4. For each group with duplicates:
-   - Keeps the first file as the canonical copy
-   - Updates all `itam_assets` records pointing to duplicate files to point to the canonical one
-   - Deletes the duplicate files from storage
-5. Also re-migrates any assets still pointing to external assettiger.com URLs (158+ assets still not migrated)
+The `deduplicate-asset-photos` function timed out previously because it tried to download and hash all files in one go. Update it to:
+- Process files in smaller batches
+- Skip files already named with a SHA-256 hash pattern (already canonical)
+- Focus on deleting storage files that are NOT referenced by any `itam_assets.custom_fields->>'photo_url'`
 
-### UI Fix (Immediate)
+### 2. Stop scanning storage for orphans in the UI
 
-Additionally, I will update both `PhotoGalleryDialog` and `AssetPhotoSelector` to deduplicate by the `original_photo_url` field stored in `custom_fields`. This provides instant UI-level dedup even before running the cleanup function, by grouping images that came from the same source URL.
+The core fix: both `PhotoGalleryDialog` and `AssetPhotoSelector` currently scan storage for "orphaned images not linked to assets." This is what inflates 112 to 425. These orphans are duplicates awaiting cleanup — they should NOT be shown.
 
-## Files to Create/Modify
+**Change both components to only show distinct `photo_url` values from `itam_assets`** (the DB is already the source of truth with 112 unique URLs). Remove the `scanStorageFolder` / `addFromStorage` calls entirely.
+
+### 3. Migrate remaining 15 external URLs
+
+Update the edge function to also handle the 15 remaining `assettiger.com` references by downloading, hashing, and storing them in `migrated/`.
+
+## Files to Modify
 
 | File | Change |
 |------|--------|
-| `supabase/functions/deduplicate-asset-photos/index.ts` | **New** - Edge function for content-hash-based dedup + cleanup |
-| `src/components/helpdesk/assets/PhotoGalleryDialog.tsx` | Add DB-driven dedup using `original_photo_url` to eliminate visual duplicates |
-| `src/components/helpdesk/assets/AssetPhotoSelector.tsx` | Same DB-driven dedup approach |
+| `src/components/helpdesk/assets/PhotoGalleryDialog.tsx` | Remove `scanStorageFolder` — only query distinct `photo_url` from DB |
+| `src/components/helpdesk/assets/AssetPhotoSelector.tsx` | Remove `addFromStorage` — only query distinct `photo_url` from DB |
+| `supabase/functions/deduplicate-asset-photos/index.ts` | Add orphan cleanup: delete storage files not referenced by any asset |
 
 ## Technical Details
 
-### Edge Function: `deduplicate-asset-photos`
+### UI changes (both components)
 
-```text
-Flow:
-1. list("migrated", limit=1000) → get all files
-2. For each file: download → SHA-256 hash
-3. Group by hash: { hash → [file1, file2, ...] }
-4. For groups with >1 file:
-   a. canonical = first file
-   b. canonical_url = getPublicUrl(canonical)
-   c. For each duplicate:
-      - UPDATE itam_assets SET custom_fields = jsonb_set(custom_fields, '{photo_url}', canonical_url)
-        WHERE custom_fields->>'photo_url' = duplicate_url
-      - DELETE duplicate from storage
-5. Return summary: { duplicatesRemoved, assetsUpdated, errors }
+Remove the storage scanning entirely. The query becomes:
+```
+SELECT DISTINCT custom_fields->>'photo_url' as photo_url
+FROM itam_assets
+WHERE is_active = true
+  AND custom_fields->>'photo_url' IS NOT NULL
+  AND custom_fields->>'photo_url' LIKE '%supabase%'
 ```
 
-### UI Dedup Strategy
+This gives exactly 97 unique Supabase-hosted URLs (112 minus 15 external) — well under 100.
 
-Query `itam_assets` for distinct `photo_url` values, then show only unique images. This makes the gallery instantly clean without waiting for the storage cleanup.
+### Edge function: orphan cleanup phase
 
-### Re-migration
+After the existing hash-based dedup, add a new phase:
+1. List all files in `migrated/`
+2. Get all distinct `photo_url` values from `itam_assets`
+3. For each storage file, check if its public URL appears in the DB
+4. If not referenced by any asset, delete it from storage
+5. Also migrate the 15 remaining external URLs
 
-The edge function will also handle the 158+ assets still pointing to `assettiger.com` by downloading and storing those images in `migrated/`, using content hashing to avoid creating new duplicates.
+This cleans up the ~313 orphaned files left from incomplete previous migrations.
+
+### Expected outcome
+- Gallery count drops from 425 to ~97 unique photos
+- Storage gets cleaned of ~313+ orphaned duplicate files
+- No visual duplicates remain
 
