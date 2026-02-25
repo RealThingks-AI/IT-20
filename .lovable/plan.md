@@ -1,94 +1,94 @@
 
+Goal: make the Photo Gallery and asset image selection reliably show real images from `asset-photos/migrated/**` (not folder placeholders), and ensure new uploads also go into `migrated/`.
 
-# Fix Duplicate Images in Asset Photo Selector
+1) Findings from current code and runtime evidence
 
-## Root Cause
+- The selected UI element (`migrated`) comes from `PhotoGalleryDialog.tsx` where `assetPhotos` is built from:
+  - `supabase.storage.from("asset-photos").list()` (root listing only)
+  - then `getPublicUrl(file.name)`
+- Because root listing includes a folder entry named `migrated` (not an image), the gallery renders a card for that folder.
+- The `<img>` fails to load, triggering the fallback “No Image” placeholder (exactly what your screenshot shows).
+- Your network log confirms real image files exist under prefix `migrated` (`POST .../object/list/asset-photos` with `prefix:"migrated"` returns many `.jpg` files), so data exists but UI is reading the wrong path.
+- `PhotoGalleryDialog` upload currently writes to bucket root (`upload(fileName, file)`), which conflicts with your requirement to use `migrated/`.
 
-The current approach scans the storage bucket directory-by-directory (root, `migrated/`, subfolders). This causes duplicates because:
-1. The same image content can exist under different filenames (e.g., uploaded to root as `1709123456-abc.jpg` AND migrated to `migrated/xyz.jpg`)
-2. Multiple assets may have had photos uploaded independently to different subfolders with the same content
+2) Root cause
 
-The URL-based deduplication only catches exact URL matches, not content-level duplicates across different paths.
+- Non-recursive and wrong-level storage read in `PhotoGalleryDialog`:
+  - `list()` at root returns folders + root files, not the files inside `migrated/`.
+- Folder items are treated like image files and rendered as thumbnails.
+- Upload path inconsistency (root instead of `migrated/`) keeps splitting image sources.
 
-## Solution
+3) Implementation plan
 
-Replace the bucket-scanning approach with a **database-driven** approach that is inherently duplicate-free:
+A. Fix `PhotoGalleryDialog` data loading to target migrated images only
+- Replace query function logic to list from `migrated` prefix:
+  - `supabase.storage.from("asset-photos").list("migrated", { limit, sortBy })`
+- Filter/guard against non-image entries and folder rows (`id === null`).
+- Build public URL with full path:
+  - `getPublicUrl(\`migrated/${file.name}\`)`
+- Return photo objects with stable keying and path-aware metadata.
 
-1. Query `itam_assets` for all distinct `custom_fields->>'photo_url'` values that are non-null and non-empty
-2. Also list the bucket root for any recently uploaded images not yet assigned to assets
-3. Combine and deduplicate by URL
+B. Fix `PhotoGalleryDialog` upload destination
+- Change upload path from root to:
+  - `const filePath = \`migrated/${fileName}\``
+- Keep existing success refetch/invalidation logic.
 
-This guarantees each unique image appears exactly once.
+C. Fix delete behavior for migrated files
+- Current delete uses `remove([photo.name])` (root path).
+- Change to path-aware delete:
+  - `remove([photo.path])` where `path` is `migrated/<filename>`.
 
-### File: `src/components/helpdesk/assets/AssetPhotoSelector.tsx`
+D. Harden rendering and dedupe
+- Use URL or full path as list key (not just id) to avoid collisions.
+- Skip invalid URL records before rendering.
+- Keep fallback image behavior for broken files.
 
-Replace the `fetchPhotos` function:
+E. Align both image surfaces (consistency pass)
+- Verify `AssetPhotoSelector` and `PhotoGalleryDialog` follow same bucket conventions:
+  - source = `migrated/`
+  - upload = `migrated/`
+  - public URL built with full path.
+- If needed, extract a small shared helper later, but first fix directly in `PhotoGalleryDialog` to unblock you quickly.
 
-```typescript
-const fetchPhotos = async () => {
-  setIsLoading(true);
-  try {
-    const allPhotos: { name: string; url: string }[] = [];
-    const seenUrls = new Set<string>();
+4) Files to update
 
-    // 1. Get all unique photo_urls from assets in the database
-    const { data: assets } = await supabase
-      .from("itam_assets")
-      .select("custom_fields")
-      .eq("is_active", true)
-      .not("custom_fields->photo_url", "is", null);
+- `src/components/helpdesk/assets/PhotoGalleryDialog.tsx`
+  - queryFn storage listing path + filtering + URL generation
+  - upload mutation path
+  - delete mutation path
+  - local `AssetPhoto` shape (add `path` field)
+- (Validation-only check) `src/components/helpdesk/assets/AssetPhotoSelector.tsx`
+  - confirm no regression and same migrated-path behavior.
 
-    if (assets) {
-      for (const asset of assets) {
-        const photoUrl = (asset.custom_fields as any)?.photo_url;
-        if (photoUrl && typeof photoUrl === "string" && photoUrl.trim() && !seenUrls.has(photoUrl)) {
-          seenUrls.add(photoUrl);
-          const name = photoUrl.split("/").pop() || "image";
-          allPhotos.push({ name, url: photoUrl });
-        }
-      }
-    }
+5) Technical details (for implementation)
 
-    // 2. Also list root-level uploads (not yet assigned to any asset)
-    const imageExtensions = ["jpg", "jpeg", "png", "gif", "webp"];
-    const { data: rootFiles } = await supabase.storage.from(bucket).list("", {
-      limit: 100,
-      sortBy: { column: "created_at", order: "desc" },
-    });
-    if (rootFiles) {
-      for (const file of rootFiles) {
-        if (file.name === ".emptyFolderPlaceholder") continue;
-        const ext = file.name.toLowerCase().split(".").pop();
-        if (!imageExtensions.includes(ext || "")) continue;
-        const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(file.name);
-        if (!seenUrls.has(urlData.publicUrl)) {
-          seenUrls.add(urlData.publicUrl);
-          allPhotos.push({ name: file.name, url: urlData.publicUrl });
-        }
-      }
-    }
+- Data model update in gallery:
+  - from:
+    - `{ id, name, photo_url, created_at }`
+  - to:
+    - `{ id, name, path, photo_url, created_at }`
+- Suggested guards:
+  - `if (item.id === null) return` (folder)
+  - `ext` in `[jpg,jpeg,png,gif,webp]`
+  - `publicUrl` non-empty check
+- Query sizing:
+  - keep `limit` high enough (e.g. 1000) with created_at desc for recent-first UX.
+- No DB migration needed; this is a client-side storage path/read fix.
 
-    setPhotos(allPhotos);
-  } catch (error) {
-    console.error("Error fetching photos:", error);
-    toast.error("Failed to load photos from storage");
-  } finally {
-    setIsLoading(false);
-  }
-};
-```
+6) End-to-end validation checklist
 
-### Why This Works
-- Each unique `photo_url` from the database appears exactly once - no content duplicates
-- Newly uploaded images (root level, not yet saved to an asset) are still discoverable
-- Faster than scanning multiple storage folders
-- The `key` in the grid uses `photo.url` instead of `photo.name` to avoid React key collisions
+- Open Assets → Documents → Photo Gallery.
+- Confirm cards show actual thumbnails (no “migrated” folder tile).
+- Confirm photo count reflects real file count under `migrated/`.
+- Upload one new image from gallery and verify:
+  - it appears immediately,
+  - URL path includes `/asset-photos/migrated/`.
+- Delete an image and verify it is removed from UI and storage.
+- Open asset edit flow with `AssetPhotoSelector` and confirm the same images are visible/selectable.
 
-### Additional Fix
-Change the `key` prop on the photo grid buttons from `photo.name` to `photo.url` since names can repeat across paths.
+7) Expected result
 
-## Files to Modify
-| File | Change |
-|------|--------|
-| `src/components/helpdesk/assets/AssetPhotoSelector.tsx` | Replace fetchPhotos with DB-driven approach, fix React key |
-
+- You will see all actual images from `migrated/` in the gallery.
+- New uploads will consistently go to `migrated/`.
+- No fake folder thumbnail entries like “migrated”.
+- Image selection and gallery management will stay in one consistent folder structure.
