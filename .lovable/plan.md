@@ -1,94 +1,65 @@
 
-Goal: make the Photo Gallery and asset image selection reliably show real images from `asset-photos/migrated/**` (not folder placeholders), and ensure new uploads also go into `migrated/`.
 
-1) Findings from current code and runtime evidence
+# Fix Duplicate Images: Full Storage Cleanup + Content Deduplication
 
-- The selected UI element (`migrated`) comes from `PhotoGalleryDialog.tsx` where `assetPhotos` is built from:
-  - `supabase.storage.from("asset-photos").list()` (root listing only)
-  - then `getPublicUrl(file.name)`
-- Because root listing includes a folder entry named `migrated` (not an image), the gallery renders a card for that folder.
-- The `<img>` fails to load, triggering the fallback “No Image” placeholder (exactly what your screenshot shows).
-- Your network log confirms real image files exist under prefix `migrated` (`POST .../object/list/asset-photos` with `prefix:"migrated"` returns many `.jpg` files), so data exists but UI is reading the wrong path.
-- `PhotoGalleryDialog` upload currently writes to bucket root (`upload(fileName, file)`), which conflicts with your requirement to use `migrated/`.
+## Investigation Findings
 
-2) Root cause
+The database reveals the root cause clearly:
+- **Many assets still reference external assettiger.com URLs** (not yet migrated). The original migration ran but didn't update all assets.
+- **Multiple assets share the same source photo** (e.g., 83 assets share one image, 75 share another). When the migration ran, it may have created separate storage files for images that were already migrated.
+- The `migrated/` folder contains multiple files with identical visual content but different UUID-based filenames.
 
-- Non-recursive and wrong-level storage read in `PhotoGalleryDialog`:
-  - `list()` at root returns folders + root files, not the files inside `migrated/`.
-- Folder items are treated like image files and rendered as thumbnails.
-- Upload path inconsistency (root instead of `migrated/`) keeps splitting image sources.
+This means the gallery shows the same image multiple times because multiple storage files exist with identical content.
 
-3) Implementation plan
+## Solution: Edge Function for Content-Based Deduplication
 
-A. Fix `PhotoGalleryDialog` data loading to target migrated images only
-- Replace query function logic to list from `migrated` prefix:
-  - `supabase.storage.from("asset-photos").list("migrated", { limit, sortBy })`
-- Filter/guard against non-image entries and folder rows (`id === null`).
-- Build public URL with full path:
-  - `getPublicUrl(\`migrated/${file.name}\`)`
-- Return photo objects with stable keying and path-aware metadata.
+Since you want full storage cleanup with visual similarity, I will create an edge function that:
 
-B. Fix `PhotoGalleryDialog` upload destination
-- Change upload path from root to:
-  - `const filePath = \`migrated/${fileName}\``
-- Keep existing success refetch/invalidation logic.
+1. Lists all files in the `migrated/` folder
+2. Downloads each file and computes a SHA-256 content hash
+3. Groups files by hash (identical content = same hash)
+4. For each group with duplicates:
+   - Keeps the first file as the canonical copy
+   - Updates all `itam_assets` records pointing to duplicate files to point to the canonical one
+   - Deletes the duplicate files from storage
+5. Also re-migrates any assets still pointing to external assettiger.com URLs (158+ assets still not migrated)
 
-C. Fix delete behavior for migrated files
-- Current delete uses `remove([photo.name])` (root path).
-- Change to path-aware delete:
-  - `remove([photo.path])` where `path` is `migrated/<filename>`.
+### UI Fix (Immediate)
 
-D. Harden rendering and dedupe
-- Use URL or full path as list key (not just id) to avoid collisions.
-- Skip invalid URL records before rendering.
-- Keep fallback image behavior for broken files.
+Additionally, I will update both `PhotoGalleryDialog` and `AssetPhotoSelector` to deduplicate by the `original_photo_url` field stored in `custom_fields`. This provides instant UI-level dedup even before running the cleanup function, by grouping images that came from the same source URL.
 
-E. Align both image surfaces (consistency pass)
-- Verify `AssetPhotoSelector` and `PhotoGalleryDialog` follow same bucket conventions:
-  - source = `migrated/`
-  - upload = `migrated/`
-  - public URL built with full path.
-- If needed, extract a small shared helper later, but first fix directly in `PhotoGalleryDialog` to unblock you quickly.
+## Files to Create/Modify
 
-4) Files to update
+| File | Change |
+|------|--------|
+| `supabase/functions/deduplicate-asset-photos/index.ts` | **New** - Edge function for content-hash-based dedup + cleanup |
+| `src/components/helpdesk/assets/PhotoGalleryDialog.tsx` | Add DB-driven dedup using `original_photo_url` to eliminate visual duplicates |
+| `src/components/helpdesk/assets/AssetPhotoSelector.tsx` | Same DB-driven dedup approach |
 
-- `src/components/helpdesk/assets/PhotoGalleryDialog.tsx`
-  - queryFn storage listing path + filtering + URL generation
-  - upload mutation path
-  - delete mutation path
-  - local `AssetPhoto` shape (add `path` field)
-- (Validation-only check) `src/components/helpdesk/assets/AssetPhotoSelector.tsx`
-  - confirm no regression and same migrated-path behavior.
+## Technical Details
 
-5) Technical details (for implementation)
+### Edge Function: `deduplicate-asset-photos`
 
-- Data model update in gallery:
-  - from:
-    - `{ id, name, photo_url, created_at }`
-  - to:
-    - `{ id, name, path, photo_url, created_at }`
-- Suggested guards:
-  - `if (item.id === null) return` (folder)
-  - `ext` in `[jpg,jpeg,png,gif,webp]`
-  - `publicUrl` non-empty check
-- Query sizing:
-  - keep `limit` high enough (e.g. 1000) with created_at desc for recent-first UX.
-- No DB migration needed; this is a client-side storage path/read fix.
+```text
+Flow:
+1. list("migrated", limit=1000) → get all files
+2. For each file: download → SHA-256 hash
+3. Group by hash: { hash → [file1, file2, ...] }
+4. For groups with >1 file:
+   a. canonical = first file
+   b. canonical_url = getPublicUrl(canonical)
+   c. For each duplicate:
+      - UPDATE itam_assets SET custom_fields = jsonb_set(custom_fields, '{photo_url}', canonical_url)
+        WHERE custom_fields->>'photo_url' = duplicate_url
+      - DELETE duplicate from storage
+5. Return summary: { duplicatesRemoved, assetsUpdated, errors }
+```
 
-6) End-to-end validation checklist
+### UI Dedup Strategy
 
-- Open Assets → Documents → Photo Gallery.
-- Confirm cards show actual thumbnails (no “migrated” folder tile).
-- Confirm photo count reflects real file count under `migrated/`.
-- Upload one new image from gallery and verify:
-  - it appears immediately,
-  - URL path includes `/asset-photos/migrated/`.
-- Delete an image and verify it is removed from UI and storage.
-- Open asset edit flow with `AssetPhotoSelector` and confirm the same images are visible/selectable.
+Query `itam_assets` for distinct `photo_url` values, then show only unique images. This makes the gallery instantly clean without waiting for the storage cleanup.
 
-7) Expected result
+### Re-migration
 
-- You will see all actual images from `migrated/` in the gallery.
-- New uploads will consistently go to `migrated/`.
-- No fake folder thumbnail entries like “migrated”.
-- Image selection and gallery management will stay in one consistent folder structure.
+The edge function will also handle the 158+ assets still pointing to `assettiger.com` by downloading and storing those images in `migrated/`, using content hashing to avoid creating new duplicates.
+
