@@ -22,7 +22,7 @@ interface AssetPhotoSelectorProps {
 
 interface StorageFile {
   name: string;
-  id: string;
+  id: string | null;
   updated_at: string;
   created_at: string;
   last_accessed_at: string;
@@ -57,41 +57,40 @@ export function AssetPhotoSelector({
       const seenUrls = new Set<string>();
       const imageExtensions = ["jpg", "jpeg", "png", "gif", "webp"];
 
-      // 1. List all images from migrated/ folder (primary source)
-      const { data: migratedFiles } = await supabase.storage.from(bucket).list("migrated", {
-        limit: 500,
-        sortBy: { column: "created_at", order: "desc" },
-      });
-      if (migratedFiles) {
-        for (const file of migratedFiles) {
-          if (file.name === ".emptyFolderPlaceholder") continue;
-          const ext = file.name.toLowerCase().split(".").pop();
-          if (!imageExtensions.includes(ext || "")) continue;
-          const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(`migrated/${file.name}`);
-          if (!seenUrls.has(urlData.publicUrl)) {
-            seenUrls.add(urlData.publicUrl);
-            allPhotos.push({ name: file.name, url: urlData.publicUrl });
-          }
-        }
-      }
+      const addPhotosFromPath = async (path: string): Promise<void> => {
+        const { data, error } = await supabase.storage.from(bucket).list(path, {
+          limit: 1000,
+          sortBy: { column: "created_at", order: "desc" },
+        });
 
-      // 2. Also include any DB-referenced photo_urls not already seen
-      const { data: assets } = await supabase
-        .from("itam_assets")
-        .select("custom_fields")
-        .eq("is_active", true)
-        .not("custom_fields->photo_url", "is", null);
+        if (error || !data) return;
 
-      if (assets) {
-        for (const asset of assets) {
-          const photoUrl = (asset.custom_fields as any)?.photo_url;
-          if (photoUrl && typeof photoUrl === "string" && photoUrl.trim() && !seenUrls.has(photoUrl)) {
-            seenUrls.add(photoUrl);
-            const name = photoUrl.split("/").pop() || "image";
-            allPhotos.push({ name, url: photoUrl });
-          }
-        }
-      }
+        await Promise.all(
+          data.map(async (item: StorageFile) => {
+            if (item.name === ".emptyFolderPlaceholder") return;
+
+            const fullPath = path ? `${path}/${item.name}` : item.name;
+            const isFolder = item.id === null;
+
+            if (isFolder) {
+              await addPhotosFromPath(fullPath);
+              return;
+            }
+
+            const ext = item.name.toLowerCase().split(".").pop();
+            if (!imageExtensions.includes(ext || "")) return;
+
+            const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(fullPath);
+            if (!seenUrls.has(urlData.publicUrl)) {
+              seenUrls.add(urlData.publicUrl);
+              allPhotos.push({ name: item.name, url: urlData.publicUrl });
+            }
+          })
+        );
+      };
+
+      // Always load from migrated/ (including nested folders), never root
+      await addPhotosFromPath("migrated");
 
       setPhotos(allPhotos);
     } catch (error) {
