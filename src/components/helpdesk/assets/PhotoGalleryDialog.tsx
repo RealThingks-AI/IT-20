@@ -14,10 +14,12 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 interface AssetPhoto {
   id: string;
   name: string;
+  path: string;
   photo_url: string;
   created_at: string | null;
-  metadata?: Record<string, unknown>;
 }
+
+const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "webp"];
 
 export function PhotoGalleryDialog() {
   const queryClient = useQueryClient();
@@ -27,13 +29,43 @@ export function PhotoGalleryDialog() {
   const { data: assetPhotos, refetch: refetchPhotos } = useQuery({
     queryKey: ["asset-photos-storage"],
     queryFn: async () => {
-      const { data, error } = await supabase.storage.from("asset-photos").list();
-      if (error) throw error;
-      const photosWithUrls = data.map((file) => {
-        const { data: { publicUrl } } = supabase.storage.from("asset-photos").getPublicUrl(file.name);
-        return { id: file.id, name: file.name, photo_url: publicUrl, created_at: file.created_at, metadata: file.metadata };
-      });
-      return photosWithUrls as AssetPhoto[];
+      const allPhotos: AssetPhoto[] = [];
+      const seenUrls = new Set<string>();
+
+      const addPhotosFromPath = async (prefix: string): Promise<void> => {
+        const { data, error } = await supabase.storage
+          .from("asset-photos")
+          .list(prefix, { limit: 1000, sortBy: { column: "created_at", order: "desc" } });
+        if (error || !data) return;
+
+        await Promise.all(
+          data.map(async (item) => {
+            if (item.name === ".emptyFolderPlaceholder") return;
+            const fullPath = prefix ? `${prefix}/${item.name}` : item.name;
+            // Folder entries have id === null
+            if (item.id === null) {
+              await addPhotosFromPath(fullPath);
+              return;
+            }
+            const ext = item.name.toLowerCase().split(".").pop();
+            if (!ext || !IMAGE_EXTENSIONS.includes(ext)) return;
+            const { data: { publicUrl } } = supabase.storage.from("asset-photos").getPublicUrl(fullPath);
+            if (publicUrl && !seenUrls.has(publicUrl)) {
+              seenUrls.add(publicUrl);
+              allPhotos.push({
+                id: item.id ?? fullPath,
+                name: item.name,
+                path: fullPath,
+                photo_url: publicUrl,
+                created_at: item.created_at,
+              });
+            }
+          })
+        );
+      };
+
+      await addPhotosFromPath("migrated");
+      return allPhotos;
     },
   });
 
@@ -41,7 +73,8 @@ export function PhotoGalleryDialog() {
     mutationFn: async (file: File) => {
       const fileExt = file.name.split(".").pop();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-      const { error: uploadError } = await supabase.storage.from("asset-photos").upload(fileName, file);
+      const filePath = `migrated/${fileName}`;
+      const { error: uploadError } = await supabase.storage.from("asset-photos").upload(filePath, file);
       if (uploadError) throw uploadError;
     },
     onSuccess: () => { toast.success("Photo uploaded successfully"); queryClient.invalidateQueries({ queryKey: ["asset-photos-storage"] }); refetchPhotos(); },
@@ -50,7 +83,7 @@ export function PhotoGalleryDialog() {
 
   const deletePhotoMutation = useMutation({
     mutationFn: async (photo: AssetPhoto) => {
-      const { error: storageError } = await supabase.storage.from("asset-photos").remove([photo.name]);
+      const { error: storageError } = await supabase.storage.from("asset-photos").remove([photo.path]);
       if (storageError) throw storageError;
     },
     onSuccess: () => { toast.success("Photo deleted successfully"); queryClient.invalidateQueries({ queryKey: ["asset-photos-storage"] }); refetchPhotos(); },
@@ -99,7 +132,7 @@ export function PhotoGalleryDialog() {
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-4">
               {assetPhotos?.map((photo) => (
-                <div key={photo.id} className="relative group">
+                <div key={photo.path} className="relative group">
                   <div className="aspect-square rounded-lg overflow-hidden bg-muted">
                     <img src={photo.photo_url} alt={photo.name} className="w-full h-full object-cover hover:scale-110 transition-transform" onError={(e) => { e.currentTarget.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Crect fill="%23ddd" width="100" height="100"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="%23999"%3ENo Image%3C/text%3E%3C/svg%3E'; }} />
                   </div>
