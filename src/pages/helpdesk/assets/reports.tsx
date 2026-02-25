@@ -124,8 +124,8 @@ const AssetReports = () => {
   const defaultOpen = reportCategories.find(c => c.id === activeType)?.id || "asset";
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="px-4 py-3">
+    <div className="space-y-4">
+      <div>
         <div className="mb-4">
           <h1 className="text-lg font-semibold">Asset Reports</h1>
           <p className="text-sm text-muted-foreground">Generate and export comprehensive asset management reports</p>

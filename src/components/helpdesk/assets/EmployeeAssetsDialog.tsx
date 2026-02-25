@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Package, Mail, User, MoreHorizontal, ExternalLink, RotateCcw, UserPlus, CheckSquare } from "lucide-react";
 import { getStatusLabel } from "@/lib/assetStatusUtils";
+import { invalidateAllAssetQueries } from "@/lib/assetQueryUtils";
 import { useUsers } from "@/hooks/useUsers";
 import { toast } from "sonner";
 
@@ -114,9 +115,18 @@ export function EmployeeAssetsDialog({ employee, open, onOpenChange }: EmployeeA
         assigned_by: user?.id || null,
         assigned_at: new Date().toISOString(),
       });
+
+      // Log to history
+      await supabase.from("itam_asset_history").insert({
+        asset_id: assetId,
+        action: "reassigned",
+        details: { from: employee?.id, to: newUserId },
+        performed_by: user?.id,
+      });
     },
     onSuccess: () => {
       toast.success("Asset reassigned successfully");
+      invalidateAllAssetQueries(queryClient);
       queryClient.invalidateQueries({ queryKey: ["employee-assigned-assets"] });
       queryClient.invalidateQueries({ queryKey: ["employee-asset-history"] });
       queryClient.invalidateQueries({ queryKey: ["employee-asset-counts"] });
@@ -131,7 +141,15 @@ export function EmployeeAssetsDialog({ employee, open, onOpenChange }: EmployeeA
     mutationFn: async (assetId: string) => {
       const { error: updateErr } = await supabase
         .from("itam_assets")
-        .update({ assigned_to: null, status: "available", updated_at: new Date().toISOString() })
+        .update({ 
+          assigned_to: null, 
+          status: "available", 
+          updated_at: new Date().toISOString(),
+          checked_out_to: null,
+          checked_out_at: null,
+          expected_return_date: null,
+          check_out_notes: null,
+        })
         .eq("id", assetId);
       if (updateErr) throw updateErr;
 
@@ -147,9 +165,19 @@ export function EmployeeAssetsDialog({ employee, open, onOpenChange }: EmployeeA
             .is("returned_at", null);
         }
       }
+
+      // Log to history
+      const { data: { user } } = await supabase.auth.getUser();
+      await supabase.from("itam_asset_history").insert({
+        asset_id: assetId,
+        action: "returned_to_stock",
+        details: { returned_from: employee?.id },
+        performed_by: user?.id,
+      });
     },
     onSuccess: () => {
       toast.success("Asset returned to stock");
+      invalidateAllAssetQueries(queryClient);
       queryClient.invalidateQueries({ queryKey: ["employee-assigned-assets"] });
       queryClient.invalidateQueries({ queryKey: ["employee-asset-history"] });
       queryClient.invalidateQueries({ queryKey: ["employee-asset-counts"] });
@@ -291,7 +319,7 @@ export function EmployeeAssetsDialog({ employee, open, onOpenChange }: EmployeeA
                           />
                         )}
                       </TableHead>
-                      <TableHead className="font-medium text-xs uppercase text-muted-foreground">Asset Name</TableHead>
+                      
                       <TableHead className="font-medium text-xs uppercase text-muted-foreground">Asset Tag</TableHead>
                       <TableHead className="font-medium text-xs uppercase text-muted-foreground">Category</TableHead>
                       <TableHead className="font-medium text-xs uppercase text-muted-foreground">Status</TableHead>
@@ -301,13 +329,13 @@ export function EmployeeAssetsDialog({ employee, open, onOpenChange }: EmployeeA
                   <TableBody>
                     {isLoading ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8">
+                        <TableCell colSpan={5} className="text-center py-8">
                           <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto" />
                         </TableCell>
                       </TableRow>
                     ) : assets.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                           No assets currently assigned
                         </TableCell>
                       </TableRow>
@@ -320,9 +348,6 @@ export function EmployeeAssetsDialog({ employee, open, onOpenChange }: EmployeeA
                               onCheckedChange={() => toggleSelect(asset.id)}
                               aria-label={`Select ${asset.name}`}
                             />
-                          </TableCell>
-                          <TableCell>
-                            <p className="font-medium text-sm">{asset.name}</p>
                           </TableCell>
                           <TableCell>
                             <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
@@ -345,7 +370,7 @@ export function EmployeeAssetsDialog({ employee, open, onOpenChange }: EmployeeA
                               <DropdownMenuContent align="end" className="w-48">
                                 <DropdownMenuItem onClick={() => {
                                   onOpenChange(false);
-                                  navigate(`/assets/detail/${asset.id}`);
+                                  navigate(`/assets/detail/${asset.asset_tag || asset.asset_id || asset.id}`);
                                 }}>
                                   <ExternalLink className="h-4 w-4 mr-2" />
                                   View Asset

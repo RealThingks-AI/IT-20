@@ -78,7 +78,7 @@ export function PhotoGalleryDialog() {
               <CardDescription className="text-xs">Browse asset photos</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-xs text-muted-foreground mb-2">{assetPhotos?.length || 0} photos</div>
+              <div className="text-xs text-muted-foreground mb-2">{assetPhotos?.length || 0} {(assetPhotos?.length || 0) === 1 ? 'photo' : 'photos'}</div>
               <Button variant="outline" className="w-full h-8 text-xs">Open Gallery</Button>
             </CardContent>
           </Card>

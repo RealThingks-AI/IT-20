@@ -18,7 +18,7 @@ import {
 import { Search, Plus, Key } from "lucide-react";
 import { format } from "date-fns";
 
-const LicensesList = () => {
+const LicensesList = ({ embedded = false }: { embedded?: boolean }) => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -49,14 +49,14 @@ const LicensesList = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="p-6 space-y-4">
+    <div className={embedded ? "" : "min-h-screen bg-background"}>
+      <div className={embedded ? "space-y-4" : "p-6 space-y-4"}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <BackButton />
+            {!embedded && <BackButton />}
             <div>
-              <h1 className="text-2xl font-bold">License Management</h1>
-              <p className="text-sm text-muted-foreground">
+              <h1 className={embedded ? "text-base font-semibold" : "text-2xl font-bold"}>License Management</h1>
+              <p className="text-xs text-muted-foreground">
                 {filteredLicenses.length} licenses
               </p>
             </div>

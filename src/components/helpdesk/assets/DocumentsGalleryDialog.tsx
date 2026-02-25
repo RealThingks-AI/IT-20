@@ -104,7 +104,7 @@ export function DocumentsGalleryDialog() {
               <CardDescription className="text-xs">Browse asset documents</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-xs text-muted-foreground mb-2">{documents?.length || 0} documents</div>
+              <div className="text-xs text-muted-foreground mb-2">{documents?.length || 0} {(documents?.length || 0) === 1 ? 'document' : 'documents'}</div>
               <Button variant="outline" className="w-full h-8 text-xs">Open Gallery</Button>
             </CardContent>
           </Card>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -10,11 +11,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { 
-  Search, Plus, Users, Building2, Mail, Phone, Globe, Wrench, Shield, Upload, 
-  TrendingUp, ClipboardCheck, CheckCircle, ExternalLink, MapPin, FolderTree, 
+  Search, Plus, Users, Building2, Mail, Phone, Globe, Wrench, Shield,
+  TrendingUp, CheckCircle, ExternalLink, MapPin, FolderTree, 
   Briefcase, Package, Pencil, Trash2, Settings, FileBarChart,
   ChevronLeft, ChevronRight, Tag, Loader2, MoreHorizontal, UserX, PackageX,
-  Send, Eye, UserMinus
+  Send, Eye, ScrollText, Key, TrendingDown, FileDown, Image, FileText
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { SortableTableHeader, SortConfig } from "@/components/helpdesk/SortableTableHeader";
@@ -23,21 +24,70 @@ import { supabase } from "@/integrations/supabase/client";
 import { format, differenceInDays, isPast } from "date-fns";
 import { toast } from "sonner";
 import { useAssetSetupConfig } from "@/hooks/useAssetSetupConfig";
-import { Badge } from "@/components/ui/badge";
 import { EmailsTab } from "@/components/helpdesk/assets/setup/EmailsTab";
 import { PhotoGalleryDialog } from "@/components/helpdesk/assets/PhotoGalleryDialog";
 import { DocumentsGalleryDialog } from "@/components/helpdesk/assets/DocumentsGalleryDialog";
 import { EmployeeAssetsDialog } from "@/components/helpdesk/assets/EmployeeAssetsDialog";
-import { useOrganisationUsers, OrganisationUser } from "@/hooks/useUsers";
+import { useUsers, AppUser } from "@/hooks/useUsers";
 import AssetReports from "@/pages/helpdesk/assets/reports";
+import AssetLogsPage from "@/pages/helpdesk/assets/AssetLogsPage";
+import LicensesIndex from "@/pages/helpdesk/assets/licenses/index";
+import DepreciationDashboard from "@/pages/helpdesk/assets/depreciation/index";
+import ImportExportPage from "@/pages/helpdesk/assets/import-export";
+
+// Documents stats component that queries real data
+const DocumentsStats = () => {
+  const { data: docCount = 0 } = useQuery({
+    queryKey: ["itam-docs-count"],
+    queryFn: async () => {
+      const { count, error } = await supabase.from("itam_asset_documents").select("*", { count: "exact", head: true });
+      if (error) throw error;
+      return count || 0;
+    },
+  });
+
+  const { data: photoCount = 0 } = useQuery({
+    queryKey: ["itam-photos-count"],
+    queryFn: async () => {
+      const { data, error } = await supabase.storage.from("asset-photos").list("", { limit: 1000 });
+      if (error) return 0;
+      return data?.length || 0;
+    },
+  });
+
+  const { data: assetsWithMedia = 0 } = useQuery({
+    queryKey: ["itam-assets-with-media"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("itam_asset_documents").select("asset_id");
+      if (error) return 0;
+      const uniqueAssets = new Set(data?.map(d => d.asset_id).filter(id => id && id !== "00000000-0000-0000-0000-000000000000"));
+      return uniqueAssets.size;
+    },
+  });
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <StatCard icon={Image} value={photoCount} label="Total Photos" colorClass="bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400" />
+      <StatCard icon={FileText} value={docCount} label="Total Documents" colorClass="bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400" />
+      <StatCard icon={Package} value={assetsWithMedia} label="Assets with Media" colorClass="bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400" />
+    </div>
+  );
+};
+
+// Wrapper components to embed existing pages without their own headers/padding
+const LicensesContent = () => <LicensesIndex embedded />;
+const DepreciationContent = () => <DepreciationDashboard />;
+const ImportExportContent = () => <ImportExportPage embedded />;
+const AssetLogsContent = () => <AssetLogsPage />;
 
 // Tab configuration for Setup sub-navigation
 const SETUP_TABS = [
-  { id: "sites", label: "Sites & Locations", icon: MapPin },
-  { id: "categories", label: "Categories", icon: FolderTree },
-  { id: "departments", label: "Departments", icon: Briefcase },
-  { id: "makes", label: "Makes", icon: Package },
-  { id: "emails", label: "Emails", icon: Mail },
+  { id: "sites", label: "Sites & Locations" },
+  { id: "categories", label: "Categories" },
+  { id: "departments", label: "Departments" },
+  { id: "makes", label: "Makes" },
+  { id: "emails", label: "Emails" },
+  { id: "activity-log", label: "Activity Log" },
 ] as const;
 
 type SetupTabId = typeof SETUP_TABS[number]["id"];
@@ -88,7 +138,7 @@ const StatusDot = ({ status, label }: { status: "active" | "inactive" | "pending
 };
 
 // Pagination component
-const Pagination = ({ currentPage, totalPages, onPageChange }: { currentPage: number; totalPages: number; onPageChange: (page: number) => void }) => {
+const PaginationControls = ({ currentPage, totalPages, onPageChange }: { currentPage: number; totalPages: number; onPageChange: (page: number) => void }) => {
   if (totalPages <= 1) return null;
   return (
     <div className="flex items-center justify-between pt-3 px-1">
@@ -107,9 +157,28 @@ const Pagination = ({ currentPage, totalPages, onPageChange }: { currentPage: nu
   );
 };
 
+// CSV export utility
+const exportCSV = (rows: Record<string, string | number>[], filename: string) => {
+  if (rows.length === 0) { toast.info("No data to export"); return; }
+  const headers = Object.keys(rows[0]);
+  const csvContent = [
+    headers.join(","),
+    ...rows.map(row => headers.map(h => `"${String(row[h] ?? "").replace(/"/g, '""')}"`).join(","))
+  ].join("\n");
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${filename}_${new Date().toISOString().split("T")[0]}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+  toast.success(`Exported ${rows.length} records`);
+};
+
 export default function AdvancedPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState("employees");
   const [setupSubTab, setSetupSubTab] = useState<SetupTabId>("sites");
@@ -124,15 +193,18 @@ export default function AdvancedPage() {
 
   // Employees: sorting, role/status filters
   const [employeeSort, setEmployeeSort] = useState<SortConfig>({ column: "name", direction: "asc" });
+  const [vendorSort, setVendorSort] = useState<SortConfig>({ column: "name", direction: "asc" });
   const [employeeRoleFilter, setEmployeeRoleFilter] = useState("all");
   const [employeeStatusFilter, setEmployeeStatusFilter] = useState("all");
 
   // Pagination state
   const [employeePage, setEmployeePage] = useState(1);
   const [vendorPage, setVendorPage] = useState(1);
+  const [maintenancePage, setMaintenancePage] = useState(1);
+  const [warrantyPage, setWarrantyPage] = useState(1);
   
   // Employee assets dialog
-  const [selectedEmployee, setSelectedEmployee] = useState<OrganisationUser | null>(null);
+  const [selectedEmployee, setSelectedEmployee] = useState<AppUser | null>(null);
   const [employeeDialogOpen, setEmployeeDialogOpen] = useState(false);
   
   // Setup config for sites, locations, etc.
@@ -224,17 +296,26 @@ export default function AdvancedPage() {
 
   useEffect(() => {
     const tab = searchParams.get("tab");
-    if (tab && ["employees", "vendors", "maintenances", "warranties", "tools", "setup", "reports"].includes(tab)) {
+    if (tab && ["employees", "vendors", "licenses", "repairs", "warranties", "depreciation", "documents", "import-export", "reports", "setup"].includes(tab)) {
       setActiveTab(tab);
     }
   }, [searchParams]);
 
+  // Grab portal target for rendering tabs into layout header
+  useEffect(() => {
+    const el = document.getElementById("module-header-portal");
+    setPortalTarget(el);
+    return () => setPortalTarget(null);
+  }, []);
+
   // Reset pagination on search change
   useEffect(() => { setEmployeePage(1); }, [employeeSearch]);
   useEffect(() => { setVendorPage(1); }, [vendorSearch]);
+  useEffect(() => { setMaintenancePage(1); }, [maintenanceSearch, maintenanceStatusFilter]);
+  useEffect(() => { setWarrantyPage(1); }, [warrantySearch, warrantyStatusFilter]);
 
   // Fetch users/employees using the simplified hook
-  const { data: employees = [], isLoading: loadingEmployees } = useOrganisationUsers();
+  const { data: employees = [], isLoading: loadingEmployees } = useUsers();
 
   // Fetch asset counts for employees
   const { data: assetCounts = {} } = useQuery({
@@ -258,7 +339,7 @@ export default function AdvancedPage() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const getEmployeeAssetCount = (emp: OrganisationUser) => {
+  const getEmployeeAssetCount = (emp: AppUser) => {
     return (assetCounts[emp.id] || 0) + 
       (emp.auth_user_id && emp.auth_user_id !== emp.id 
         ? (assetCounts[emp.auth_user_id] || 0) 
@@ -291,7 +372,7 @@ export default function AdvancedPage() {
         .order("created_at", { ascending: false });
       return data || [];
     },
-    enabled: activeTab === "maintenances",
+    enabled: activeTab === "repairs",
     staleTime: 5 * 60 * 1000,
   });
 
@@ -353,12 +434,28 @@ export default function AdvancedPage() {
     }));
   };
 
-  const filteredVendors = vendors.filter((vendor) =>
-    vendorSearch
-      ? vendor.name.toLowerCase().includes(vendorSearch.toLowerCase()) ||
-        vendor.contact_email?.toLowerCase().includes(vendorSearch.toLowerCase())
-      : true
-  );
+  const filteredVendors = vendors
+    .filter((vendor) =>
+      vendorSearch
+        ? vendor.name.toLowerCase().includes(vendorSearch.toLowerCase()) ||
+          vendor.contact_email?.toLowerCase().includes(vendorSearch.toLowerCase())
+        : true
+    )
+    .sort((a, b) => {
+      const { column, direction } = vendorSort;
+      if (!direction) return 0;
+      const mult = direction === "asc" ? 1 : -1;
+      const valA = ((a as any)[column] || "") as string;
+      const valB = ((b as any)[column] || "") as string;
+      return valA.localeCompare(valB) * mult;
+    });
+
+  const handleVendorSort = (column: string) => {
+    setVendorSort(prev => ({
+      column,
+      direction: prev.column === column ? (prev.direction === "asc" ? "desc" : prev.direction === "desc" ? null : "asc") : "asc",
+    }));
+  };
 
   const filteredMaintenances = maintenances.filter(m => {
     if (maintenanceStatusFilter !== "all" && m.status !== maintenanceStatusFilter) return false;
@@ -394,6 +491,12 @@ export default function AdvancedPage() {
 
   const vendorTotalPages = Math.ceil(filteredVendors.length / ITEMS_PER_PAGE);
   const paginatedVendors = filteredVendors.slice((vendorPage - 1) * ITEMS_PER_PAGE, vendorPage * ITEMS_PER_PAGE);
+
+  const maintenanceTotalPages = Math.ceil(filteredMaintenances.length / ITEMS_PER_PAGE);
+  const paginatedMaintenances = filteredMaintenances.slice((maintenancePage - 1) * ITEMS_PER_PAGE, maintenancePage * ITEMS_PER_PAGE);
+
+  const warrantyTotalPages = Math.ceil(filteredWarranties.length / ITEMS_PER_PAGE);
+  const paginatedWarranties = filteredWarranties.slice((warrantyPage - 1) * ITEMS_PER_PAGE, warrantyPage * ITEMS_PER_PAGE);
 
   const getMaintenanceStatusDot = (status: string) => {
     const map: Record<string, { status: "pending" | "in_progress" | "completed" | "cancelled"; label: string }> = {
@@ -446,7 +549,6 @@ export default function AdvancedPage() {
       if (!user) throw new Error("Not authenticated");
       const tableName = getTableName(dialogType);
       if (dialogMode === "add") {
-        // Check for duplicate name (case-insensitive) for categories
         if (dialogType === "category") {
           const { data: existing } = await supabase
             .from("itam_categories")
@@ -515,7 +617,7 @@ export default function AdvancedPage() {
   const warrantyExpired = assetsWithWarranty.filter(a => getWarrantyStatus(a.warranty_expiry).status === "expired").length;
   const warrantyActive = assetsWithWarranty.filter(a => getWarrantyStatus(a.warranty_expiry).status === "active").length;
 
-  const handleViewEmployeeAssets = (employee: OrganisationUser) => {
+  const handleViewEmployeeAssets = (employee: AppUser) => {
     setSelectedEmployee(employee);
     setEmployeeDialogOpen(true);
   };
@@ -531,11 +633,11 @@ export default function AdvancedPage() {
   };
 
   const getSetupType = () => {
-    const typeMap: Record<SetupTabId, string> = {
+    const typeMap: Record<string, string> = {
       sites: "site", categories: "category",
-      departments: "department", makes: "make", emails: "",
+      departments: "department", makes: "make", emails: "", "activity-log": "",
     };
-    return typeMap[setupSubTab];
+    return typeMap[setupSubTab] || "";
   };
 
   const renderSetupTable = (items: any[], type: string) => (
@@ -584,16 +686,11 @@ export default function AdvancedPage() {
     <>
       <Card>
         <CardHeader className="flex flex-row items-center justify-between border-b pb-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10">
-              <FolderTree className="h-4 w-4 text-primary" />
-            </div>
-            <div>
-              <CardTitle className="text-base">Categories</CardTitle>
-              <CardDescription className="text-xs">
-                Manage asset categories and tag format prefixes
-              </CardDescription>
-            </div>
+          <div>
+            <CardTitle className="text-base">Categories</CardTitle>
+            <CardDescription className="text-xs">
+              Manage asset categories and tag format prefixes
+            </CardDescription>
           </div>
           <Button size="sm" onClick={() => openAddDialog("category")}>
             <Plus className="h-3 w-3 mr-2" />
@@ -626,7 +723,7 @@ export default function AdvancedPage() {
                     <TableRow key={cat.id}>
                       <TableCell className="font-medium">{cat.name}</TableCell>
                       <TableCell>
-                        {tf ? <Badge variant="secondary">{tf.prefix}</Badge> : <span className="text-muted-foreground text-sm">—</span>}
+                        {tf ? <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{tf.prefix}</code> : <span className="text-muted-foreground text-sm">—</span>}
                       </TableCell>
                       <TableCell>{tf ? tf.zero_padding : "—"}</TableCell>
                       <TableCell>
@@ -696,40 +793,30 @@ export default function AdvancedPage() {
   );
 
   const renderSitesLocationsTable = () => {
-    // Build unified rows: sites first, then locations grouped by parent site
     type UnifiedRow = { id: string; name: string; rowType: "site" | "location"; parentSiteName: string | null; site_id?: string | null };
     const rows: UnifiedRow[] = [];
 
-    // Add all sites
     sites.forEach((s) => rows.push({ id: s.id, name: s.name, rowType: "site", parentSiteName: null }));
 
-    // Add locations grouped by parent site (sites with children first, then orphans)
     const locationsWithSite = locations.filter((l) => l.site_id);
     const locationsWithoutSite = locations.filter((l) => !l.site_id);
 
-    // Sort locations under their parent site order
     sites.forEach((s) => {
       locationsWithSite
         .filter((l) => l.site_id === s.id)
         .forEach((l) => rows.push({ id: l.id, name: l.name, rowType: "location", parentSiteName: s.name, site_id: l.site_id }));
     });
 
-    // Orphan locations at the end
     locationsWithoutSite.forEach((l) => rows.push({ id: l.id, name: l.name, rowType: "location", parentSiteName: null, site_id: null }));
 
     return (
       <Card>
         <CardHeader className="flex flex-row items-center justify-between border-b pb-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10">
-              <MapPin className="h-4 w-4 text-primary" />
-            </div>
-            <div>
-              <CardTitle className="text-base">Sites & Locations</CardTitle>
-              <CardDescription className="text-xs">
-                Manage sites and locations for your company
-              </CardDescription>
-            </div>
+          <div>
+            <CardTitle className="text-base">Sites & Locations</CardTitle>
+            <CardDescription className="text-xs">
+              Manage sites and locations for your company
+            </CardDescription>
           </div>
           <div className="flex gap-2">
             <Button size="sm" variant="outline" onClick={() => openAddDialog("location")}>
@@ -765,9 +852,7 @@ export default function AdvancedPage() {
                   <TableRow key={`${row.rowType}-${row.id}`}>
                     <TableCell className="font-medium">{row.name}</TableCell>
                     <TableCell>
-                      <Badge variant={row.rowType === "site" ? "default" : "secondary"}>
-                        {row.rowType === "site" ? "Site" : "Location"}
-                      </Badge>
+                      <span className="text-sm capitalize">{row.rowType}</span>
                     </TableCell>
                     <TableCell>
                       {row.rowType === "location" && row.parentSiteName ? (
@@ -813,25 +898,20 @@ export default function AdvancedPage() {
     const type = getSetupType();
     const items = getSetupItems();
     const tabConfig = SETUP_TABS.find(t => t.id === setupSubTab);
-    const Icon = tabConfig?.icon || Settings;
 
     if (setupSubTab === "sites") return renderSitesLocationsTable();
     if (setupSubTab === "categories") return renderCategoriesTable();
     if (setupSubTab === "emails") return <EmailsTab />;
+    if (setupSubTab === "activity-log") return <AssetLogsContent />;
 
     return (
       <Card>
         <CardHeader className="flex flex-row items-center justify-between border-b pb-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10">
-              <Icon className="h-4 w-4 text-primary" />
-            </div>
-            <div>
-              <CardTitle className="text-base">{tabConfig?.label}</CardTitle>
-              <CardDescription className="text-xs">
-                Manage {tabConfig?.label.toLowerCase()} for your company
-              </CardDescription>
-            </div>
+          <div>
+            <CardTitle className="text-base">{tabConfig?.label}</CardTitle>
+            <CardDescription className="text-xs">
+              Manage {tabConfig?.label.toLowerCase()} for your company
+            </CardDescription>
           </div>
           <Button size="sm" onClick={() => openAddDialog(type)}>
             <Plus className="h-3 w-3 mr-2" />
@@ -849,68 +929,58 @@ export default function AdvancedPage() {
     <div className="h-full flex flex-col bg-background">
       {/* Single Tabs wrapper for both header and content */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full">
-        {/* Sticky tabs header */}
-        <div className="sticky top-0 z-20 bg-background border-b px-4 pt-3 pb-0">
-          <TabsList className="h-9 bg-muted rounded-lg p-1 w-full justify-start gap-1">
-            <TabsTrigger value="employees" className="gap-1.5 text-xs">
-              <Users className="h-3.5 w-3.5" />
-              Employees
-            </TabsTrigger>
-            <TabsTrigger value="vendors" className="gap-1.5 text-xs">
-              <Building2 className="h-3.5 w-3.5" />
-              Vendors
-            </TabsTrigger>
-            <TabsTrigger value="maintenances" className="gap-1.5 text-xs">
-              <Wrench className="h-3.5 w-3.5" />
-              Maintenances
-            </TabsTrigger>
-            <TabsTrigger value="warranties" className="gap-1.5 text-xs">
-              <Shield className="h-3.5 w-3.5" />
-              Warranties
-            </TabsTrigger>
-            <TabsTrigger value="tools" className="gap-1.5 text-xs">
-              <Upload className="h-3.5 w-3.5" />
-              Tools
-            </TabsTrigger>
-            <TabsTrigger value="reports" className="gap-1.5 text-xs">
-              <FileBarChart className="h-3.5 w-3.5" />
-              Reports
-            </TabsTrigger>
-            <TabsTrigger value="setup" className="gap-1.5 text-xs">
-              <Settings className="h-3.5 w-3.5" />
-              Setup
-            </TabsTrigger>
-          </TabsList>
+      {/* Portal tabs into ModuleLayout header */}
+      {portalTarget && createPortal(
+        <TabsList className="h-9 bg-muted rounded-lg p-1 w-full justify-start gap-1 overflow-x-auto overflow-y-hidden">
+          <TabsTrigger value="employees" className="text-sm">Employees</TabsTrigger>
+          <TabsTrigger value="vendors" className="text-sm">Vendors</TabsTrigger>
+          <TabsTrigger value="licenses" className="text-sm">Licenses</TabsTrigger>
+          <TabsTrigger value="repairs" className="text-sm">Repairs</TabsTrigger>
+          <TabsTrigger value="warranties" className="text-sm">Warranties</TabsTrigger>
+          <TabsTrigger value="depreciation" className="text-sm">Depreciation</TabsTrigger>
+          <TabsTrigger value="documents" className="text-sm">Documents</TabsTrigger>
+          <TabsTrigger value="import-export" className="text-sm">Import/Export</TabsTrigger>
+          <TabsTrigger value="reports" className="text-sm">Reports</TabsTrigger>
+          <TabsTrigger value="setup" className="text-sm">Setup</TabsTrigger>
+        </TabsList>,
+        portalTarget
+      )}
 
-          {/* Secondary Navigation for Setup Tab */}
-          {activeTab === "setup" && (
-            <div className="flex flex-wrap gap-1 pt-3 pb-3">
-              {SETUP_TABS.map((tab) => {
-                const Icon = tab.icon;
-                const isActive = setupSubTab === tab.id;
-                return (
-                  <Button
-                    key={tab.id}
-                    variant={isActive ? "default" : "ghost"}
-                    size="sm"
-                    onClick={() => setSetupSubTab(tab.id)}
-                    className={`gap-1.5 h-7 text-xs ${isActive ? "" : "text-muted-foreground"}`}
-                  >
-                    <Icon className="h-3.5 w-3.5" />
-                    {tab.label}
-                  </Button>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        {/* Secondary Navigation for Setup Tab */}
+        {activeTab === "setup" && (
+          <div className="border-b px-4 py-2 flex flex-wrap gap-1.5 bg-background">
+            {SETUP_TABS.map((tab) => {
+              const isActive = setupSubTab === tab.id;
+              const countMap: Record<string, number> = {
+                sites: sites.length,
+                categories: categories.length,
+                departments: departments.length,
+                makes: makes.length,
+              };
+              const count = countMap[tab.id];
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setSetupSubTab(tab.id)}
+                  className={`h-7 px-3 rounded-md text-xs font-medium transition-colors ${
+                    isActive
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80"
+                  }`}
+                >
+                  {tab.label}{count !== undefined ? ` (${count})` : ""}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* Scrollable content */}
         <div className="flex-1 overflow-auto p-4">
           {/* Employees Tab */}
           <TabsContent value="employees" className="mt-0 space-y-4">
-            {/* Stat Cards - 5 cards, all clickable */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            {/* Stat Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
               <StatCard icon={Users} value={employees.length} label="Total Employees" colorClass="bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400" onClick={() => { setEmployeeStatusFilter("all"); setEmployeeRoleFilter("all"); }} active={employeeStatusFilter === "all" && employeeRoleFilter === "all"} />
               <StatCard icon={CheckCircle} value={employees.filter(e => e.status === "active").length} label="Active" colorClass="bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400" onClick={() => { setEmployeeStatusFilter("active"); setEmployeeRoleFilter("all"); }} active={employeeStatusFilter === "active"} />
               <StatCard icon={UserX} value={employees.filter(e => e.status !== "active").length} label="Inactive" colorClass="bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400" onClick={() => { setEmployeeStatusFilter("inactive"); setEmployeeRoleFilter("all"); }} active={employeeStatusFilter === "inactive"} />
@@ -921,12 +991,12 @@ export default function AdvancedPage() {
             <Card>
               <CardContent className="pt-4 space-y-4">
                 <div className="flex items-center gap-3 flex-wrap">
-                  <div className="relative max-w-xs flex-1 min-w-[200px]">
+                  <div className="relative max-w-sm flex-1 min-w-[200px]">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input placeholder="Search employees..." value={employeeSearch} onChange={(e) => setEmployeeSearch(e.target.value)} className="pl-9" />
                   </div>
                   <Select value={employeeRoleFilter} onValueChange={setEmployeeRoleFilter}>
-                    <SelectTrigger className="w-[130px] h-9">
+                    <SelectTrigger className="w-[140px] h-9">
                       <SelectValue placeholder="All Roles" />
                     </SelectTrigger>
                     <SelectContent>
@@ -938,7 +1008,7 @@ export default function AdvancedPage() {
                     </SelectContent>
                   </Select>
                   <Select value={employeeStatusFilter} onValueChange={setEmployeeStatusFilter}>
-                    <SelectTrigger className="w-[130px] h-9">
+                    <SelectTrigger className="w-[140px] h-9">
                       <SelectValue placeholder="All Status" />
                     </SelectTrigger>
                     <SelectContent>
@@ -948,7 +1018,7 @@ export default function AdvancedPage() {
                     </SelectContent>
                   </Select>
                   <div className="ml-auto">
-                    <Button size="sm" variant="outline" onClick={() => navigate("/settings?section=users")}>
+                    <Button size="sm" variant="outline" onClick={() => navigate("/admin/users")}>
                       <Users className="h-4 w-4 mr-2" />
                       Manage Users
                     </Button>
@@ -1002,14 +1072,7 @@ export default function AdvancedPage() {
                                   {employee.name || "—"}
                                 </div>
                               </TableCell>
-                              <TableCell className="text-sm">
-                                {employee.email ? (
-                                  <div className="flex items-center gap-1.5">
-                                    <Mail className="h-3.5 w-3.5 text-muted-foreground" />
-                                    {employee.email}
-                                  </div>
-                                ) : "—"}
-                              </TableCell>
+                              <TableCell className="text-sm text-muted-foreground truncate max-w-[200px]">{employee.email || "—"}</TableCell>
                               <TableCell className="text-sm capitalize">{employee.role || "user"}</TableCell>
                               <TableCell>
                                 <StatusDot status={employee.status === "active" ? "active" : "inactive"} label={employee.status === "active" ? "Active" : "Inactive"} />
@@ -1037,7 +1100,7 @@ export default function AdvancedPage() {
                                       Assign Asset
                                     </DropdownMenuItem>
                                     <DropdownMenuSeparator />
-                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); navigate("/settings?section=users"); }}>
+                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); navigate("/admin/users"); }}>
                                       <Users className="h-4 w-4 mr-2" />
                                       View Profile
                                     </DropdownMenuItem>
@@ -1056,7 +1119,6 @@ export default function AdvancedPage() {
                   </Table>
                 </div>
                 
-                {/* Pagination with info text */}
                 {employeeTotalPages > 1 && (
                   <div className="flex items-center justify-between pt-1 px-1">
                     <p className="text-xs text-muted-foreground">
@@ -1079,19 +1141,31 @@ export default function AdvancedPage() {
 
           {/* Vendors Tab */}
           <TabsContent value="vendors" className="mt-0 space-y-4">
+            {/* Vendor Stat Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <StatCard icon={Building2} value={vendors.length} label="Total Vendors" colorClass="bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400" />
+              <StatCard icon={Mail} value={vendors.filter(v => v.contact_email).length} label="With Contact" colorClass="bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400" />
+              <StatCard icon={Globe} value={vendors.filter(v => v.website).length} label="With Website" colorClass="bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400" />
+            </div>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between border-b pb-4">
                 <div>
                   <CardTitle className="text-base">Vendors</CardTitle>
                   <CardDescription className="text-xs">{filteredVendors.length} vendor records</CardDescription>
                 </div>
-                <Button size="sm" onClick={() => navigate("/assets/vendors/add-vendor")}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Vendor
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => exportCSV(filteredVendors.map(v => ({ Name: v.name, Contact: v.contact_name || "", Email: v.contact_email || "", Phone: v.contact_phone || "", Website: v.website || "" })), "vendors")}>
+                    <FileDown className="h-4 w-4 mr-1" />
+                    Export
+                  </Button>
+                  <Button size="sm" onClick={() => navigate("/assets/vendors/add-vendor")}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Vendor
                 </Button>
+                </div>
               </CardHeader>
               <CardContent className="pt-4 space-y-4">
-                <div className="relative max-w-md">
+                <div className="relative max-w-sm">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input placeholder="Search vendors..." value={vendorSearch} onChange={(e) => setVendorSearch(e.target.value)} className="pl-9" />
                 </div>
@@ -1100,17 +1174,18 @@ export default function AdvancedPage() {
                   <Table>
                     <TableHeader className="bg-muted/50">
                       <TableRow>
-                        <TableHead className="font-medium text-xs uppercase text-muted-foreground">Vendor Name</TableHead>
-                        <TableHead className="font-medium text-xs uppercase text-muted-foreground">Contact Person</TableHead>
-                        <TableHead className="font-medium text-xs uppercase text-muted-foreground">Email</TableHead>
+                        <SortableTableHeader column="name" label="Vendor Name" sortConfig={vendorSort} onSort={handleVendorSort} />
+                        <SortableTableHeader column="contact_name" label="Contact Person" sortConfig={vendorSort} onSort={handleVendorSort} />
+                        <SortableTableHeader column="contact_email" label="Email" sortConfig={vendorSort} onSort={handleVendorSort} />
                         <TableHead className="font-medium text-xs uppercase text-muted-foreground">Phone</TableHead>
                         <TableHead className="font-medium text-xs uppercase text-muted-foreground">Website</TableHead>
+                        <TableHead className="font-medium text-xs uppercase text-muted-foreground w-[80px]">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {loadingVendors ? (
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center py-12">
+                          <TableCell colSpan={6} className="text-center py-12">
                             <div className="text-center space-y-2">
                               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
                               <p className="text-sm text-muted-foreground">Loading vendors...</p>
@@ -1119,7 +1194,7 @@ export default function AdvancedPage() {
                         </TableRow>
                       ) : paginatedVendors.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center py-12">
+                          <TableCell colSpan={6} className="text-center py-12">
                             <div className="flex flex-col items-center justify-center">
                               <Building2 className="h-12 w-12 text-muted-foreground mb-3 opacity-50" />
                               <p className="text-sm text-muted-foreground">No vendors found</p>
@@ -1160,19 +1235,45 @@ export default function AdvancedPage() {
                                 </a>
                               ) : "—"}
                             </TableCell>
+                            <TableCell>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-48">
+                                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); navigate(`/assets/vendors/detail/${vendor.id}`); }}>
+                                    <Eye className="h-4 w-4 mr-2" />
+                                    View Details
+                                  </DropdownMenuItem>
+                                  {vendor.contact_email && (
+                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); window.open(`mailto:${vendor.contact_email}`, '_blank'); }}>
+                                      <Send className="h-4 w-4 mr-2" />
+                                      Email Vendor
+                                    </DropdownMenuItem>
+                                  )}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </TableCell>
                           </TableRow>
                         ))
                       )}
                     </TableBody>
                   </Table>
                 </div>
-                <Pagination currentPage={vendorPage} totalPages={vendorTotalPages} onPageChange={setVendorPage} />
+                <PaginationControls currentPage={vendorPage} totalPages={vendorTotalPages} onPageChange={setVendorPage} />
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* Maintenances Tab */}
-          <TabsContent value="maintenances" className="mt-0 space-y-4">
+          {/* Licenses Tab */}
+          <TabsContent value="licenses" className="mt-0">
+            <LicensesContent />
+          </TabsContent>
+
+          {/* Repairs Tab */}
+          <TabsContent value="repairs" className="mt-0 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <StatCard icon={Wrench} value={maintenancePending} label="Pending" colorClass="bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400" />
               <StatCard icon={Wrench} value={maintenanceInProgress} label="In Progress" colorClass="bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400" />
@@ -1182,22 +1283,22 @@ export default function AdvancedPage() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between border-b pb-4">
                 <div>
-                  <CardTitle className="text-base">All Maintenance Records</CardTitle>
+                  <CardTitle className="text-base">All Repair Records</CardTitle>
                   <CardDescription className="text-xs">{filteredMaintenances.length} records</CardDescription>
                 </div>
                 <Button size="sm" onClick={() => navigate("/assets/repairs/create")}>
                   <Plus className="h-4 w-4 mr-1" />
-                  New Maintenance
+                  New Record
                 </Button>
               </CardHeader>
               <CardContent className="pt-4 space-y-4">
                 <div className="flex items-center gap-4 flex-wrap">
                   <div className="relative flex-1 max-w-sm">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input placeholder="Search maintenance records..." value={maintenanceSearch} onChange={(e) => setMaintenanceSearch(e.target.value)} className="pl-9" />
+                    <Input placeholder="Search repairs..." value={maintenanceSearch} onChange={(e) => setMaintenanceSearch(e.target.value)} className="pl-9" />
                   </div>
                   <Select value={maintenanceStatusFilter} onValueChange={setMaintenanceStatusFilter}>
-                    <SelectTrigger className="w-[150px]">
+                    <SelectTrigger className="w-[140px]">
                       <SelectValue placeholder="Status" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1205,6 +1306,7 @@ export default function AdvancedPage() {
                       <SelectItem value="pending">Pending</SelectItem>
                       <SelectItem value="in_progress">In Progress</SelectItem>
                       <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="cancelled">Cancelled</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1227,18 +1329,18 @@ export default function AdvancedPage() {
                           <TableCell colSpan={6} className="text-center py-12">
                             <div className="text-center space-y-2">
                               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-                              <p className="text-sm text-muted-foreground">Loading maintenance records...</p>
+                              <p className="text-sm text-muted-foreground">Loading records...</p>
                             </div>
                           </TableCell>
                         </TableRow>
-                      ) : filteredMaintenances.length === 0 ? (
+                      ) : paginatedMaintenances.length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                            No maintenance records found
+                            No records found
                           </TableCell>
                         </TableRow>
                       ) : (
-                        filteredMaintenances.map((maintenance) => (
+                        paginatedMaintenances.map((maintenance) => (
                           <TableRow key={maintenance.id}>
                             <TableCell className="font-medium">{maintenance.repair_number}</TableCell>
                             <TableCell>
@@ -1263,13 +1365,14 @@ export default function AdvancedPage() {
                     </TableBody>
                   </Table>
                 </div>
+                <PaginationControls currentPage={maintenancePage} totalPages={maintenanceTotalPages} onPageChange={setMaintenancePage} />
               </CardContent>
             </Card>
           </TabsContent>
 
           {/* Warranties Tab */}
           <TabsContent value="warranties" className="mt-0 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               <StatCard icon={CheckCircle} value={warrantyActive} label="Active" colorClass="bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400" />
               <StatCard icon={Shield} value={warrantyExpiring} label="Expiring Soon" colorClass="bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400" />
               <StatCard icon={Shield} value={warrantyExpired} label="Expired" colorClass="bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400" />
@@ -1279,8 +1382,16 @@ export default function AdvancedPage() {
               <CardHeader className="flex flex-row items-center justify-between border-b pb-4">
                 <div>
                   <CardTitle className="text-base">Asset Warranties</CardTitle>
-                  <CardDescription className="text-xs">{filteredWarranties.length} warranty records</CardDescription>
+                  <CardDescription className="text-xs">{filteredWarranties.length} warranty records • To add warranty info, edit an asset from the All Assets view</CardDescription>
                 </div>
+                <Button size="sm" variant="outline" onClick={() => exportCSV(filteredWarranties.map(a => ({
+                  Asset: a.name, Tag: a.asset_tag || "", Category: (a as any).category?.name || "",
+                  "Expiry Date": a.warranty_expiry ? format(new Date(a.warranty_expiry), "yyyy-MM-dd") : "",
+                  Status: getWarrantyStatus(a.warranty_expiry).label
+                })), "warranties")}>
+                  <FileDown className="h-4 w-4 mr-1" />
+                  Export
+                </Button>
               </CardHeader>
               <CardContent className="pt-4 space-y-4">
                 <div className="flex items-center gap-4 flex-wrap">
@@ -1289,7 +1400,7 @@ export default function AdvancedPage() {
                     <Input placeholder="Search warranties..." value={warrantySearch} onChange={(e) => setWarrantySearch(e.target.value)} className="pl-9" />
                   </div>
                   <Select value={warrantyStatusFilter} onValueChange={setWarrantyStatusFilter}>
-                    <SelectTrigger className="w-[150px]">
+                    <SelectTrigger className="w-[140px]">
                       <SelectValue placeholder="Status" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1323,14 +1434,14 @@ export default function AdvancedPage() {
                             </div>
                           </TableCell>
                         </TableRow>
-                      ) : filteredWarranties.length === 0 ? (
+                      ) : paginatedWarranties.length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                             No warranty records found
                           </TableCell>
                         </TableRow>
                       ) : (
-                        filteredWarranties.map((asset) => {
+                        paginatedWarranties.map((asset) => {
                           const warrantyInfo = getWarrantyStatus(asset.warranty_expiry);
                           return (
                             <TableRow key={asset.id}>
@@ -1360,68 +1471,28 @@ export default function AdvancedPage() {
                     </TableBody>
                   </Table>
                 </div>
+                <PaginationControls currentPage={warrantyPage} totalPages={warrantyTotalPages} onPageChange={setWarrantyPage} />
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* Tools Tab */}
-          <TabsContent value="tools" className="mt-0 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              <Card className="border hover:border-primary/50 transition-all hover:shadow-md cursor-pointer" onClick={() => navigate("/assets/import-export")}>
-                <CardHeader className="pb-3">
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-2">
-                    <Upload className="h-5 w-5 text-primary" />
-                  </div>
-                  <CardTitle className="text-sm font-semibold">Import / Export</CardTitle>
-                  <CardDescription className="text-xs">Bulk import/export assets with proper field mapping</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Button variant="outline" className="w-full h-8 text-xs">Open Wizard</Button>
-                </CardContent>
-              </Card>
+          {/* Depreciation Tab */}
+          <TabsContent value="depreciation" className="mt-0">
+            <DepreciationContent />
+          </TabsContent>
 
+          {/* Documents Tab */}
+          <TabsContent value="documents" className="mt-0 space-y-4">
+            <DocumentsStats />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <PhotoGalleryDialog />
               <DocumentsGalleryDialog />
-
-              <Card className="border hover:border-primary/50 transition-all hover:shadow-md cursor-pointer" onClick={() => navigate("/assets/depreciation")}>
-                <CardHeader className="pb-3">
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-2">
-                    <TrendingUp className="h-5 w-5 text-primary" />
-                  </div>
-                  <CardTitle className="text-sm font-semibold">Depreciation</CardTitle>
-                  <CardDescription className="text-xs">Track asset lifecycle</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Button variant="outline" className="w-full h-8 text-xs">Manage Lifecycle</Button>
-                </CardContent>
-              </Card>
-
-              <Card className="border hover:border-primary/50 transition-all hover:shadow-md cursor-pointer" onClick={() => navigate("/assets/repairs")}>
-                <CardHeader className="pb-3">
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-2">
-                    <Wrench className="h-5 w-5 text-primary" />
-                  </div>
-                  <CardTitle className="text-sm font-semibold">Repairs</CardTitle>
-                  <CardDescription className="text-xs">Track asset repairs</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Button variant="outline" className="w-full h-8 text-xs">View Repairs</Button>
-                </CardContent>
-              </Card>
-
-              <Card className="border hover:border-primary/50 transition-all hover:shadow-md cursor-pointer" onClick={() => navigate("/assets/audit")}>
-                <CardHeader className="pb-3">
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-2">
-                    <ClipboardCheck className="h-5 w-5 text-primary" />
-                  </div>
-                  <CardTitle className="text-sm font-semibold">Audit</CardTitle>
-                  <CardDescription className="text-xs">View asset change history</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Button variant="outline" className="w-full h-8 text-xs">View Audit Trail</Button>
-                </CardContent>
-              </Card>
             </div>
+          </TabsContent>
+
+          {/* Import/Export Tab */}
+          <TabsContent value="import-export" className="mt-0">
+            <ImportExportContent />
           </TabsContent>
 
           {/* Reports Tab */}

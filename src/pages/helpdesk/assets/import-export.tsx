@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { useAssetExportImport, EXPORT_FIELD_GROUPS, getDefaultSelectedFields } from "@/hooks/useAssetExportImport";
 
-export default function ImportExportPage() {
+export default function ImportExportPage({ embedded = false }: { embedded?: boolean }) {
   const navigate = useNavigate();
   const {
     exportAssets,
@@ -102,22 +102,24 @@ export default function ImportExportPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <AssetModuleTopBar />
+    <div className={embedded ? "" : "min-h-screen bg-background"}>
+      {!embedded && <AssetModuleTopBar />}
 
-      <div className="px-4 py-4 space-y-4">
+      <div className={embedded ? "space-y-4" : "px-4 py-4 space-y-4"}>
         {/* Header */}
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/assets/tools")}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <h1 className="text-xl font-semibold">Import / Export Assets</h1>
-            <p className="text-sm text-muted-foreground">
-              Bulk import or export your asset data
-            </p>
+        {!embedded && (
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" onClick={() => navigate("/assets/tools")}>
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <div>
+              <h1 className="text-xl font-semibold">Import / Export Assets</h1>
+              <p className="text-sm text-muted-foreground">
+                Bulk import or export your asset data
+              </p>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>

@@ -920,7 +920,7 @@ export function useAssetExportImport() {
             continue;
           }
 
-          const assetName = isStock ? `${def.label} - Stock` : `${def.label} - ${employeeName}`;
+          const assetName = isStock ? `${def.label} - Stock` : def.label;
 
           const assetData: any = {
             asset_tag: tag,
