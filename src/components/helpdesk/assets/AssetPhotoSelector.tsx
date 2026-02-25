@@ -46,7 +46,7 @@ export function AssetPhotoSelector({
       const seenUrls = new Set<string>();
       const uniquePhotos: { name: string; url: string }[] = [];
 
-      // Get distinct photo_urls from DB first (deduplicated source of truth)
+      // Only query distinct photo_urls from DB (source of truth, no storage scanning)
       const { data: assets } = await supabase
         .from("itam_assets")
         .select("custom_fields")
@@ -65,28 +65,6 @@ export function AssetPhotoSelector({
           uniquePhotos.push({ name, url: photoUrl });
         }
       }
-
-      // Also scan storage for orphaned images
-      const addFromStorage = async (prefix: string) => {
-        const { data } = await supabase.storage.from(bucket).list(prefix, {
-          limit: 1000,
-          sortBy: { column: "created_at", order: "desc" },
-        });
-        if (!data) return;
-        for (const item of data) {
-          if (item.name === ".emptyFolderPlaceholder") continue;
-          const fullPath = prefix ? `${prefix}/${item.name}` : item.name;
-          if (item.id === null) { await addFromStorage(fullPath); continue; }
-          const ext = item.name.toLowerCase().split(".").pop();
-          if (!["jpg", "jpeg", "png", "gif", "webp"].includes(ext || "")) continue;
-          const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(fullPath);
-          if (!seenUrls.has(urlData.publicUrl)) {
-            seenUrls.add(urlData.publicUrl);
-            uniquePhotos.push({ name: item.name, url: urlData.publicUrl });
-          }
-        }
-      };
-      await addFromStorage("migrated");
 
       setPhotos(uniquePhotos);
     } catch (error) {

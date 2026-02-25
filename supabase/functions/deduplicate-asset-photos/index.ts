@@ -6,13 +6,6 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-async function sha256Hex(data: ArrayBuffer): Promise<string> {
-  const hash = await crypto.subtle.digest("SHA-256", data);
-  return Array.from(new Uint8Array(hash))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -23,7 +16,7 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // --- PHASE 1: Re-migrate external URLs ---
+    // --- PHASE 1: Migrate remaining external URLs ---
     const { data: externalAssets } = await supabase
       .from("itam_assets")
       .select("id, asset_tag, custom_fields")
@@ -33,8 +26,6 @@ Deno.serve(async (req) => {
 
     let remigratedCount = 0;
     const remigrationErrors: string[] = [];
-    // Build a map of external URL → already-migrated storage path to avoid re-downloading
-    const externalToLocal = new Map<string, string>();
 
     if (externalAssets && externalAssets.length > 0) {
       // Group by URL for dedup
@@ -56,11 +47,9 @@ Deno.serve(async (req) => {
           const ext = contentType.includes("png") ? "png" : contentType.includes("webp") ? "webp" : "jpg";
           const fileName = `migrated/${hash}.${ext}`;
 
-          // Upload with upsert (idempotent)
           await supabase.storage.from("asset-photos").upload(fileName, buf, { contentType, upsert: true });
           const { data: urlData } = supabase.storage.from("asset-photos").getPublicUrl(fileName);
           const newUrl = urlData.publicUrl;
-          externalToLocal.set(extUrl, newUrl);
 
           for (const asset of assets) {
             const updated = { ...asset.custom_fields, photo_url: newUrl, original_photo_url: extUrl };
@@ -73,8 +62,24 @@ Deno.serve(async (req) => {
       }
     }
 
-    // --- PHASE 2: Content-hash dedup of migrated/ files ---
-    const allFiles: { name: string; path: string }[] = [];
+    // --- PHASE 2: Get all referenced photo_urls from DB ---
+    const { data: allAssets } = await supabase
+      .from("itam_assets")
+      .select("custom_fields")
+      .not("custom_fields->>photo_url", "is", null)
+      .limit(5000);
+
+    const referencedUrls = new Set<string>();
+    if (allAssets) {
+      for (const a of allAssets) {
+        const url = (a.custom_fields as Record<string, unknown>)?.photo_url as string;
+        if (url) referencedUrls.add(url);
+      }
+    }
+    console.log(`Found ${referencedUrls.size} distinct referenced URLs in DB`);
+
+    // --- PHASE 3: List all storage files and delete orphans ---
+    const allFiles: { name: string; path: string; url: string }[] = [];
     const listFiles = async (prefix: string) => {
       const { data } = await supabase.storage.from("asset-photos").list(prefix, { limit: 1000 });
       if (!data) return;
@@ -87,78 +92,52 @@ Deno.serve(async (req) => {
         }
         const ext = item.name.toLowerCase().split(".").pop();
         if (["jpg", "jpeg", "png", "gif", "webp"].includes(ext || "")) {
-          allFiles.push({ name: item.name, path: fullPath });
+          const { data: urlData } = supabase.storage.from("asset-photos").getPublicUrl(fullPath);
+          allFiles.push({ name: item.name, path: fullPath, url: urlData.publicUrl });
         }
       }
     };
     await listFiles("migrated");
+    console.log(`Found ${allFiles.length} files in storage`);
 
-    console.log(`Found ${allFiles.length} image files in migrated/`);
+    // Delete orphans in batches of 20
+    let orphansDeleted = 0;
+    const orphanErrors: string[] = [];
+    const orphanPaths: string[] = [];
 
-    // Download each and compute hash
-    const hashToFiles = new Map<string, { name: string; path: string; url: string }[]>();
     for (const file of allFiles) {
-      try {
-        const { data: dlData, error: dlError } = await supabase.storage.from("asset-photos").download(file.path);
-        if (dlError || !dlData) continue;
-        const buf = await dlData.arrayBuffer();
-        const hash = await sha256Hex(buf);
-        const { data: urlData } = supabase.storage.from("asset-photos").getPublicUrl(file.path);
-        const entry = { ...file, url: urlData.publicUrl };
-        if (!hashToFiles.has(hash)) hashToFiles.set(hash, []);
-        hashToFiles.get(hash)!.push(entry);
-      } catch {
-        // skip individual file errors
+      if (!referencedUrls.has(file.url)) {
+        orphanPaths.push(file.path);
       }
     }
+    console.log(`Found ${orphanPaths.length} orphaned files to delete`);
 
-    let duplicatesRemoved = 0;
-    let assetsUpdated = 0;
-    const dedupErrors: string[] = [];
-
-    for (const [_hash, files] of hashToFiles) {
-      if (files.length <= 1) continue;
-
-      // Keep the first file as canonical
-      const canonical = files[0];
-      const duplicates = files.slice(1);
-
-      for (const dup of duplicates) {
-        try {
-          // Update any assets pointing to the duplicate URL
-          const { data: affectedAssets } = await supabase
-            .from("itam_assets")
-            .select("id, custom_fields")
-            .eq("custom_fields->>photo_url", dup.url);
-
-          if (affectedAssets && affectedAssets.length > 0) {
-            for (const asset of affectedAssets) {
-              const updated = { ...asset.custom_fields, photo_url: canonical.url };
-              await supabase.from("itam_assets").update({ custom_fields: updated }).eq("id", asset.id);
-              assetsUpdated++;
-            }
-          }
-
-          // Delete the duplicate file from storage
-          const { error: rmError } = await supabase.storage.from("asset-photos").remove([dup.path]);
-          if (rmError) throw rmError;
-          duplicatesRemoved++;
-        } catch (e) {
-          dedupErrors.push(`${dup.path}: ${e instanceof Error ? e.message : String(e)}`);
+    // Delete in batches
+    const BATCH_SIZE = 20;
+    for (let i = 0; i < orphanPaths.length; i += BATCH_SIZE) {
+      const batch = orphanPaths.slice(i, i + BATCH_SIZE);
+      try {
+        const { error } = await supabase.storage.from("asset-photos").remove(batch);
+        if (error) {
+          orphanErrors.push(`Batch ${i}: ${error.message}`);
+        } else {
+          orphansDeleted += batch.length;
         }
+      } catch (e) {
+        orphanErrors.push(`Batch ${i}: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
 
     return new Response(
       JSON.stringify({
-        message: "Deduplication complete",
+        message: "Deduplication & cleanup complete",
         phase1_remigrated: remigratedCount,
         phase1_errors: remigrationErrors.slice(0, 10),
-        phase2_uniqueHashes: hashToFiles.size,
-        phase2_duplicatesRemoved: duplicatesRemoved,
-        phase2_assetsUpdated: assetsUpdated,
-        phase2_errors: dedupErrors.slice(0, 10),
-        totalFilesScanned: allFiles.length,
+        referencedUrlsInDB: referencedUrls.size,
+        totalStorageFiles: allFiles.length,
+        orphansDeleted,
+        orphanErrors: orphanErrors.slice(0, 10),
+        remainingFiles: allFiles.length - orphansDeleted,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
@@ -171,3 +150,10 @@ Deno.serve(async (req) => {
     });
   }
 });
+
+async function sha256Hex(data: ArrayBuffer): Promise<string> {
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
