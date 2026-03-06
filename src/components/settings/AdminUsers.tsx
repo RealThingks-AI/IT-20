@@ -646,7 +646,7 @@ export function AdminUsers() {
                 <Separator />
 
                 {/* Recent Activity */}
-                <UserRecentActivity userId={detailUser.auth_user_id} />
+                <UserRecentActivity userId={detailUser.id} />
 
                 <Separator />
 
