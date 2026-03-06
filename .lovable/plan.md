@@ -1,76 +1,71 @@
 
 
-# Subscriptions Module — Full Audit, Bug Fixes, and User Assignment
+# Admin Panel — All Issues Found & Fix Plan
 
-## Build Error Fix (Immediate)
-- `supabase/functions/subscription-renewal-check/index.ts` line 108: `error` is `unknown` type. Fix with `(error as Error).message`.
+## Issues Discovered
 
-## Bugs & Logic Issues Found
+### 1. CRITICAL: `update_user_status` DB function crashes (the error you see)
+**Error**: `invalid input value for enum app_role: "owner"`
+**Root cause**: The `update_user_status` function has an ORDER BY clause that compares `role` (typed as `app_role`) against `'owner'` and `'staff'` — neither exists in the `app_role` enum `{admin, manager, user, viewer}`. PostgreSQL tries to cast these strings to `app_role` and crashes.
+**Fix**: Replace the ORDER BY to only use valid enum values.
 
-### 1. AddToolDialog — Owner picker uses name-matching (fragile)
-**Bug**: Owner is stored as `owner_name` string, matched via `u.name === field.value`. If two users share a name, wrong user is selected. Owner email resolution only works on submit, not on re-edit.
-**Fix**: Store owner as user UUID internally, resolve display name from users list. Keep `owner_name`/`owner_email` DB columns populated for display.
+### 2. CRITICAL: `notify_role_change` trigger references non-existent column
+The `user_role_change_notification` trigger on the `users` table calls `notify_role_change()`, which references `NEW.organisation_id`. The `users` table has **no `organisation_id` column**. If `users.role` ever changes, this trigger crashes. Currently masked because EditUserDialog doesn't update the role column on the `users` table directly.
+**Fix**: Update the function to pass `NULL` instead of `NEW.organisation_id`.
 
-### 2. AddToolDialog — Quantity field: user assignment feature (NEW)
-**Current**: Quantity is a plain number input. No way to assign specific users to subscription seats.
-**New**: Add a "Manage Assigned Users" section below quantity. When quantity > 0, show a user-picker list where users can be added/removed. Assigned users are stored in `subscriptions_licenses` table (one row per user-seat). This reuses the existing license infrastructure but makes it seamless from the subscription form itself.
+### 3. `users.role` column drifts out of sync with `user_roles.role`
+Pratik Wable has `admin` in `users.role` but `viewer` in `user_roles.role`. The `update_user_role` RPC updates `user_roles` but never syncs `users.role`. The UI reads from `user_roles` (correct), but the stale `users.role` creates confusion and potential bugs elsewhere.
+**Fix**: Add a sync step in `update_user_role` to also update `users.role`.
 
-### 3. Subscription Detail — License tab shows `license.user_id` as fallback (line 320)
-**Bug**: Falls back to raw UUID `license.user_id` which doesn't exist on the schema. Should show "Unassigned" instead.
-**Fix**: Remove `license.user_id` fallback, use "—" for unassigned.
+### 4. `UserRecentActivity` queries wrong ID column
+In the detail sheet, `UserRecentActivity` uses `detailUser.auth_user_id` to query `audit_logs.user_id`. But audit logs store the app user ID (`users.id`), not `auth_user_id`. Result: "No recent activity" is always shown even for active users.
+**Fix**: Pass `detailUser.id` (app user ID) instead of `detailUser.auth_user_id`.
 
-### 4. Subscription Detail — Quantity/seats sync issue
-**Bug**: `license_count` is set to `values.quantity` on save, but when users are assigned via licenses tab, the count can drift. The utilization card shows `license_count` as total but `licenses.filter(assigned)` as used — these can be inconsistent.
-**Fix**: Always derive total seats from `quantity` field. Show utilization card whenever `quantity > 0` (not just when licenses exist).
-
-### 5. `/subscription/new` route — Orphaned page
-The `/subscription/new` route opens `AddToolDialog` as a standalone page. When closed, it navigates to `/subscription/tools`. This is fragile — the dialog opens detached from any list context.
-**Fix**: Remove the `/subscription/new` route entirely. The "Add" button on the tools list and dashboard already opens the dialog properly.
-
-### 6. Dashboard — 10 skeleton cards on loading (line 178)
-Shows 10 skeleton cards but only 6 stat cards exist after load.
-**Fix**: Match skeleton count to actual card count (6).
-
-## User Assignment Feature
-
-### Approach
-When editing a subscription in `AddToolDialog`, add a collapsible "Assigned Users" section that:
-1. Shows current users assigned to this subscription (from `subscriptions_licenses` where `tool_id = this.id`)
-2. Provides a user-picker (reusing the existing Combobox pattern) to assign new users
-3. Auto-creates a `subscriptions_licenses` row with `status: "assigned"`, `assigned_to: user.id`, `assigned_to_name`, `assigned_to_email`
-4. Allows removing assignments (deletes the license row)
-5. Updates the quantity field to reflect actual assigned count
-
-This is only shown when editing (not creating) since we need the tool ID to create license rows.
-
-### On the Subscription Detail page
-- The Licenses tab already shows assigned users. Enhance it to show the user-picker inline (same as AddLicenseDialog but embedded).
-
-## UI/UX Consistency Fixes
-
-### 7. LicensesList — stat cards have inconsistent padding with other tabs
-PaymentsList and VendorsList don't have stat cards and use the full height for the table. LicensesList has stat cards + search bar + table, making it feel different from sibling tabs.
-**Fix**: Move search/filter bar and Add button into a unified top row (matching PaymentsList/VendorsList pattern). Keep stat cards but make them more compact (single row, smaller).
-
-### 8. All list components — Reset page on filter change
-Already handled correctly in most places. Verified.
-
-### 9. AddLicenseDialog — "available" as default status but DB default is "assigned"
-The DB column `subscriptions_licenses.status` defaults to `'assigned'`, but the form defaults to `'available'`. This mismatch means if status isn't explicitly set, the DB and form disagree.
-**Fix**: Change form default to "assigned" to match DB. When no user is selected, auto-set to "available".
+### 5. `log_role_change` trigger missing from `user_roles` table
+The `log_role_change()` function exists but has no trigger attached to `user_roles` (confirmed by checking `pg_trigger`). Role changes are never logged to `audit_logs`.
+**Fix**: Create the trigger on `user_roles`.
 
 ## Files to Modify
 
-| File | Changes |
-|------|---------|
-| `supabase/functions/subscription-renewal-check/index.ts` | Fix TS error: `(error as Error).message` |
-| `src/components/Subscriptions/AddToolDialog.tsx` | Add "Assigned Users" section for editing mode; fix owner picker to be UUID-based |
-| `src/components/Subscriptions/AddLicenseDialog.tsx` | Fix default status to "assigned"; minor cleanup |
-| `src/components/Subscriptions/LicensesList.tsx` | Compact stat cards; consistent layout |
-| `src/pages/helpdesk/subscription/detail/[subscriptionId].tsx` | Fix `license.user_id` fallback; show utilization when quantity > 0; inline user assignment in Licenses tab |
-| `src/pages/helpdesk/subscription/dashboard.tsx` | Fix skeleton count (10 → 6) |
-| `src/App.tsx` | Remove `/subscription/new` route |
-| `src/pages/helpdesk/subscription/new.tsx` | Delete file |
+| File/Resource | Change |
+|---|---|
+| **DB migration** | Fix `update_user_status` (remove 'owner'/'staff' from CASE), fix `notify_role_change` (remove `organisation_id` reference), update `update_user_role` to sync `users.role`, add `log_role_change` trigger |
+| `src/components/settings/AdminUsers.tsx` line 649 | Fix `UserRecentActivity` to use `detailUser.id` instead of `detailUser.auth_user_id` |
 
-No database schema changes needed. The existing `subscriptions_licenses` table already has `assigned_to` (UUID), `assigned_to_name`, `assigned_to_email`, and `tool_id` — perfect for storing user-to-subscription assignments.
+## Technical Details
+
+### DB Migration SQL
+
+```sql
+-- 1. Fix update_user_status: remove invalid enum comparisons
+CREATE OR REPLACE FUNCTION public.update_user_status(...)
+  -- Remove 'owner' and 'staff' from ORDER BY CASE
+  ORDER BY CASE role
+    WHEN 'admin' THEN 1
+    WHEN 'manager' THEN 2
+    WHEN 'user' THEN 3
+    WHEN 'viewer' THEN 4
+  END
+
+-- 2. Fix notify_role_change: remove organisation_id reference
+  PERFORM create_notification(
+    NEW.auth_user_id, ..., NULL, NULL  -- was NEW.organisation_id
+  );
+
+-- 3. Sync users.role in update_user_role
+  UPDATE public.users SET role = new_role WHERE auth_user_id = target_user_id;
+
+-- 4. Attach log_role_change trigger
+CREATE TRIGGER on_role_change AFTER UPDATE ON public.user_roles
+  FOR EACH ROW WHEN (OLD.role IS DISTINCT FROM NEW.role)
+  EXECUTE FUNCTION log_role_change();
+
+-- 5. Fix existing data drift
+UPDATE users u SET role = ur.role::text
+FROM user_roles ur WHERE ur.user_id = u.auth_user_id
+AND u.role != ur.role::text;
+```
+
+### Frontend Fix (1 line)
+In `AdminUsers.tsx` line 649, change `userId={detailUser.auth_user_id}` to `userId={detailUser.id}`.
 
