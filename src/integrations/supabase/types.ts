@@ -2229,6 +2229,45 @@ export type Database = {
         }
         Relationships: []
       }
+      itam_email_logs: {
+        Row: {
+          asset_id: string | null
+          created_at: string | null
+          error_message: string | null
+          id: string
+          recipient_email: string
+          sent_by: string | null
+          status: string | null
+          subject: string | null
+          template_id: string
+          tenant_id: number | null
+        }
+        Insert: {
+          asset_id?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          recipient_email: string
+          sent_by?: string | null
+          status?: string | null
+          subject?: string | null
+          template_id: string
+          tenant_id?: number | null
+        }
+        Update: {
+          asset_id?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          recipient_email?: string
+          sent_by?: string | null
+          status?: string | null
+          subject?: string | null
+          template_id?: string
+          tenant_id?: number | null
+        }
+        Relationships: []
+      }
       itam_license_allocations: {
         Row: {
           allocated_at: string | null
@@ -3518,64 +3557,100 @@ export type Database = {
       }
       subscriptions_tools: {
         Row: {
-          billing_cycle: string | null
+          auto_renew: boolean | null
           category: string | null
           contract_end_date: string | null
+          contract_number: string | null
           contract_start_date: string | null
           cost_per_license: number | null
           created_at: string | null
-          description: string | null
+          currency: string | null
+          department: string | null
           id: string
           is_active: boolean | null
           license_count: number | null
+          next_payment_date: string | null
           notes: string | null
+          owner_email: string | null
+          owner_name: string | null
+          payment_terms: string | null
+          purchase_date: string | null
+          quantity: number | null
+          region: string | null
+          renewal_alert_days: number | null
           renewal_date: string | null
           status: string | null
+          subscription_type: string | null
           tenant_id: number | null
           tool_name: string
           total_cost: number | null
+          unit_cost: number | null
           updated_at: string | null
           vendor_id: string | null
           website_url: string | null
         }
         Insert: {
-          billing_cycle?: string | null
+          auto_renew?: boolean | null
           category?: string | null
           contract_end_date?: string | null
+          contract_number?: string | null
           contract_start_date?: string | null
           cost_per_license?: number | null
           created_at?: string | null
-          description?: string | null
+          currency?: string | null
+          department?: string | null
           id?: string
           is_active?: boolean | null
           license_count?: number | null
+          next_payment_date?: string | null
           notes?: string | null
+          owner_email?: string | null
+          owner_name?: string | null
+          payment_terms?: string | null
+          purchase_date?: string | null
+          quantity?: number | null
+          region?: string | null
+          renewal_alert_days?: number | null
           renewal_date?: string | null
           status?: string | null
+          subscription_type?: string | null
           tenant_id?: number | null
           tool_name: string
           total_cost?: number | null
+          unit_cost?: number | null
           updated_at?: string | null
           vendor_id?: string | null
           website_url?: string | null
         }
         Update: {
-          billing_cycle?: string | null
+          auto_renew?: boolean | null
           category?: string | null
           contract_end_date?: string | null
+          contract_number?: string | null
           contract_start_date?: string | null
           cost_per_license?: number | null
           created_at?: string | null
-          description?: string | null
+          currency?: string | null
+          department?: string | null
           id?: string
           is_active?: boolean | null
           license_count?: number | null
+          next_payment_date?: string | null
           notes?: string | null
+          owner_email?: string | null
+          owner_name?: string | null
+          payment_terms?: string | null
+          purchase_date?: string | null
+          quantity?: number | null
+          region?: string | null
+          renewal_alert_days?: number | null
           renewal_date?: string | null
           status?: string | null
+          subscription_type?: string | null
           tenant_id?: number | null
           tool_name?: string
           total_cost?: number | null
+          unit_cost?: number | null
           updated_at?: string | null
           vendor_id?: string | null
           website_url?: string | null
@@ -4492,6 +4567,7 @@ export type Database = {
         }
         Returns: string
       }
+      get_app_user_id: { Args: never; Returns: string }
       get_appmaster_admin_details: {
         Args: never
         Returns: {

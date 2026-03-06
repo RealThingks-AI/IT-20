@@ -1,17 +1,21 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { TrendingDown, Calculator, Plus, Pencil, Trash2, Loader2, FolderTree, DollarSign, BarChart3 } from "lucide-react";
+import { TrendingDown, Calculator, Plus, Pencil, Trash2, FolderTree, DollarSign, BarChart3, Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { sanitizeSearchInput } from "@/lib/utils";
+import { exportCSV } from "@/lib/csvExportUtils";
 import { toast } from "sonner";
 import { differenceInDays } from "date-fns";
 import { useSystemSettings } from "@/contexts/SystemSettingsContext";
+import { StatCard } from "@/components/helpdesk/assets/StatCard";
 
 const METHOD_LABELS: Record<string, string> = {
   straight_line: "Straight-Line",
@@ -53,7 +57,6 @@ function calculateBookValue(
       for (let i = 1; i <= fullYears; i++) {
         accumulated += (usefulLifeYears - i + 1) / sum;
       }
-      // Partial year
       const partialYear = yearsElapsed - fullYears;
       if (fullYears < usefulLifeYears) {
         accumulated += ((usefulLifeYears - fullYears) / sum) * partialYear;
@@ -64,7 +67,7 @@ function calculateBookValue(
       annualDepreciation = depreciableAmount * ((usefulLifeYears - currentYear + 1) / sum);
       break;
     }
-    default: { // straight_line
+    default: {
       annualDepreciation = depreciableAmount / usefulLifeYears;
       bookValue = cost - annualDepreciation * yearsElapsed;
       bookValue = Math.max(bookValue, salvageValue);
@@ -76,17 +79,22 @@ function calculateBookValue(
   return { bookValue, depreciatedPercent, annualDepreciation };
 }
 
-export default function DepreciationDashboard() {
+export default function DepreciationDashboard({ embedded = false }: { embedded?: boolean } = {}) {
   const queryClient = useQueryClient();
   const { settings } = useSystemSettings();
-  const currencySymbol = settings.currency === "INR" ? "₹" : settings.currency === "EUR" ? "€" : settings.currency === "GBP" ? "£" : "$";
+  const CURRENCY_SYMBOLS: Record<string, string> = {
+    USD: "$", EUR: "€", GBP: "£", INR: "₹", JPY: "¥", AUD: "A$", CAD: "C$", SGD: "S$", AED: "د.إ", CNY: "¥",
+  };
+  const currencySymbol = CURRENCY_SYMBOLS[settings.currency] || settings.currency || "$";
   const formatCurrency = (amount: number) => `${currencySymbol}${amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProfile, setEditingProfile] = useState<any>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [profileToDelete, setProfileToDelete] = useState<any>(null);
+  const [assetSearch, setAssetSearch] = useState("");
+  const [assetPage, setAssetPage] = useState(1);
+  const ASSETS_PER_PAGE = 50;
 
-  // Form state
   const [name, setName] = useState("");
   const [method, setMethod] = useState("straight_line");
   const [usefulLife, setUsefulLife] = useState(5);
@@ -137,7 +145,6 @@ export default function DepreciationDashboard() {
 
   const assetsWithDepreciation = useMemo(() => {
     return assets.map((asset) => {
-      // Find matching profile by category_id
       const matchedProfile = profiles.find(p => p.category_id === asset.category_id);
       const profileMethod = matchedProfile?.method || asset.depreciation_method || "straight_line";
       const profileLife = matchedProfile?.useful_life_years || asset.useful_life_years || 5;
@@ -153,7 +160,8 @@ export default function DepreciationDashboard() {
 
       return {
         ...asset,
-        profileName: matchedProfile?.name || "Default",
+        profileName: matchedProfile?.name || null,
+        hasProfile: !!matchedProfile,
         profileMethod,
         bookValue,
         depreciatedPercent,
@@ -241,63 +249,25 @@ export default function DepreciationDashboard() {
   return (
     <div className="space-y-4">
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-3 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
-              <Calculator className="h-4 w-4" />
-            </div>
-            <div>
-              <p className="text-xl font-bold">{profiles.length}</p>
-              <p className="text-xs text-muted-foreground">Active Profiles</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-3 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400">
-              <TrendingDown className="h-4 w-4" />
-            </div>
-            <div>
-              <p className="text-xl font-bold">{methodCounts.straight_line}</p>
-              <p className="text-xs text-muted-foreground">Straight-Line</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-3 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400">
-              <BarChart3 className="h-4 w-4" />
-            </div>
-            <div>
-              <p className="text-xl font-bold">{methodCounts.declining_balance + methodCounts.sum_of_years}</p>
-              <p className="text-xs text-muted-foreground">Accelerated</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-3 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400">
-              <FolderTree className="h-4 w-4" />
-            </div>
-            <div>
-              <p className="text-xl font-bold">{linkedCategories.size}/{categories.length}</p>
-              <p className="text-xs text-muted-foreground">Categories Linked</p>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatCard icon={Calculator} value={profiles.length} label="Active Profiles" colorClass="bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400" />
+        <StatCard icon={TrendingDown} value={methodCounts.straight_line} label="Straight-Line" colorClass="bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400" />
+        <StatCard icon={BarChart3} value={methodCounts.declining_balance + methodCounts.sum_of_years} label="Accelerated" colorClass="bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400" />
+        <StatCard icon={FolderTree} value={`${linkedCategories.size}/${categories.length}`} label="Categories Linked" colorClass="bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400" />
       </div>
 
       {/* Profiles Table */}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between border-b pb-4">
-          <CardTitle className="text-base">Depreciation Profiles</CardTitle>
-          <Button size="sm" onClick={openAdd}>
-            <Plus className="h-4 w-4 mr-2" />
-            Create Profile
-          </Button>
-        </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="pt-4 space-y-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-sm font-medium text-muted-foreground">Depreciation Profiles</span>
+            <div className="ml-auto">
+              <Button size="sm" onClick={openAdd}>
+                <Plus className="h-4 w-4 mr-2" />
+                Create Profile
+              </Button>
+            </div>
+          </div>
           <Table>
             <TableHeader className="bg-muted/50">
               <TableRow>
@@ -312,16 +282,22 @@ export default function DepreciationDashboard() {
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center py-12">
-                    <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
-                  </TableCell>
-                </TableRow>
+                Array.from({ length: 4 }).map((_, i) => (
+                  <TableRow key={`skel-dep-${i}`}>
+                    <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-12" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-14" /></TableCell>
+                    <TableCell className="text-right"><Skeleton className="h-6 w-16 ml-auto" /></TableCell>
+                  </TableRow>
+                ))
               ) : profiles.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-12">
                     <div className="flex flex-col items-center">
-                      <Calculator className="h-10 w-10 text-muted-foreground mb-2 opacity-50" />
+                      <Calculator className="h-8 w-8 text-muted-foreground mb-2 opacity-50" />
                       <p className="text-sm text-muted-foreground">No depreciation profiles yet</p>
                       <Button size="sm" variant="outline" className="mt-3" onClick={openAdd}>
                         <Plus className="h-3 w-3 mr-2" /> Create your first profile
@@ -337,7 +313,7 @@ export default function DepreciationDashboard() {
                     ? (200 / profile.useful_life_years).toFixed(1)
                     : "Varies";
                   return (
-                    <TableRow key={profile.id}>
+                    <TableRow key={profile.id} className="transition-colors">
                       <TableCell className="font-medium">{profile.name}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{(profile as any).category?.name || "—"}</TableCell>
                       <TableCell className="text-sm">{METHOD_LABELS[profile.method] || profile.method}</TableCell>
@@ -364,51 +340,116 @@ export default function DepreciationDashboard() {
       {/* Asset Depreciation Summary */}
       {assetsWithDepreciation.length > 0 && (
         <Card>
-          <CardHeader className="border-b pb-4">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base">Asset Depreciation Summary</CardTitle>
-              <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                <span>Original: <strong className="text-foreground">{formatCurrency(totalOriginalValue)}</strong></span>
-                <span>Current: <strong className="text-green-600 dark:text-green-400">{formatCurrency(totalCurrentValue)}</strong></span>
-                <span>Depreciated: <strong className="text-destructive">{formatCurrency(totalDepreciation)}</strong></span>
+          <CardContent className="pt-4 space-y-4">
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="text-sm font-medium text-muted-foreground">Asset Depreciation Summary</span>
+              <div className="relative max-w-xs min-w-[200px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input placeholder="Search assets..." value={assetSearch} onChange={(e) => { setAssetSearch(e.target.value); setAssetPage(1); }} className="pl-9 h-8" />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {assetSearch ? `${assetsWithDepreciation.filter(a => a.name.toLowerCase().includes(assetSearch.toLowerCase()) || (a.asset_tag || "").toLowerCase().includes(assetSearch.toLowerCase())).length} of ` : ""}{assetsWithDepreciation.length} assets
+              </p>
+              <div className="ml-auto flex items-center gap-4">
+                <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                  <span>Original: <strong className="text-foreground">{formatCurrency(totalOriginalValue)}</strong></span>
+                  <span>Current: <strong className="text-green-600 dark:text-green-400">{formatCurrency(totalCurrentValue)}</strong></span>
+                  <span>Depreciated: <strong className="text-destructive">{formatCurrency(totalDepreciation)}</strong></span>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => {
+                  exportCSV(assetsWithDepreciation.map(a => ({
+                    "Asset": a.name,
+                    "Tag": a.asset_tag || "",
+                    "Purchase Price": Number(a.purchase_price).toFixed(2),
+                    "Purchase Date": a.purchase_date || "",
+                    "Profile": a.profileName || "No Profile Applied",
+                    "Method": a.profileMethod,
+                    "Current Value": a.bookValue.toFixed(2),
+                    "Depreciated %": a.depreciatedPercent.toFixed(1),
+                    "Annual Depreciation": a.annualDepreciation.toFixed(2),
+                  })), "depreciation");
+                }}>
+                  <TrendingDown className="h-4 w-4 mr-1" />
+                  Export CSV
+                </Button>
               </div>
             </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="max-h-[400px] overflow-y-auto">
-              <Table>
-                <TableHeader className="bg-muted/50 sticky top-0">
-                  <TableRow>
-                    <TableHead className="font-medium text-xs uppercase text-muted-foreground">Asset</TableHead>
-                    <TableHead className="font-medium text-xs uppercase text-muted-foreground">Tag</TableHead>
-                    <TableHead className="font-medium text-xs uppercase text-muted-foreground text-right">Purchase Price</TableHead>
-                    <TableHead className="font-medium text-xs uppercase text-muted-foreground">Purchase Date</TableHead>
-                    <TableHead className="font-medium text-xs uppercase text-muted-foreground">Profile</TableHead>
-                    <TableHead className="font-medium text-xs uppercase text-muted-foreground text-right">Current Value</TableHead>
-                    <TableHead className="font-medium text-xs uppercase text-muted-foreground text-right">Depreciated</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {assetsWithDepreciation.map((asset) => (
-                    <TableRow key={asset.id}>
-                      <TableCell className="font-medium">{asset.name}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{asset.asset_tag || "—"}</TableCell>
-                      <TableCell className="text-sm text-right">{formatCurrency(Number(asset.purchase_price))}</TableCell>
-                      <TableCell className="text-sm">{asset.purchase_date}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{asset.profileName}</TableCell>
-                      <TableCell className="text-sm text-right font-medium text-green-600 dark:text-green-400">
-                        {formatCurrency(asset.bookValue)}
-                      </TableCell>
-                      <TableCell className="text-sm text-right">
-                        <span className={asset.depreciatedPercent >= 90 ? "text-destructive" : asset.depreciatedPercent >= 50 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}>
-                          {asset.depreciatedPercent.toFixed(1)}%
-                        </span>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+            {(() => {
+              const filtered = assetSearch
+                ? (() => { const s = sanitizeSearchInput(assetSearch).toLowerCase(); return assetsWithDepreciation.filter(a => a.name.toLowerCase().includes(s) || (a.asset_tag || "").toLowerCase().includes(s)); })()
+                : assetsWithDepreciation;
+              const totalPages = Math.ceil(filtered.length / ASSETS_PER_PAGE);
+              const paginated = filtered.slice((assetPage - 1) * ASSETS_PER_PAGE, assetPage * ASSETS_PER_PAGE);
+              return (
+                <>
+                  <Table>
+                    <TableHeader className="bg-muted/50">
+                      <TableRow>
+                        <TableHead className="font-medium text-xs uppercase text-muted-foreground">Asset</TableHead>
+                        <TableHead className="font-medium text-xs uppercase text-muted-foreground">Tag</TableHead>
+                        <TableHead className="font-medium text-xs uppercase text-muted-foreground text-right">Purchase Price</TableHead>
+                        <TableHead className="font-medium text-xs uppercase text-muted-foreground">Purchase Date</TableHead>
+                        <TableHead className="font-medium text-xs uppercase text-muted-foreground">Profile</TableHead>
+                        <TableHead className="font-medium text-xs uppercase text-muted-foreground text-right">Current Value</TableHead>
+                        <TableHead className="font-medium text-xs uppercase text-muted-foreground text-right">Depreciated</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {paginated.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={7} className="text-center py-12">
+                            <div className="flex flex-col items-center justify-center">
+                              <TrendingDown className="h-8 w-8 text-muted-foreground mb-3 opacity-50" />
+                              <p className="text-sm text-muted-foreground">No assets match your search</p>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ) : paginated.map((asset) => (
+                        <TableRow key={asset.id} className="hover:bg-muted/50 transition-colors">
+                          <TableCell className="font-medium">{asset.name}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{asset.asset_tag || "—"}</TableCell>
+                          <TableCell className="text-sm text-right">{formatCurrency(Number(asset.purchase_price))}</TableCell>
+                          <TableCell className="text-sm">{asset.purchase_date}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {asset.profileName ? (
+                              <span>{asset.profileName}</span>
+                            ) : (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-muted text-muted-foreground">
+                                No Profile
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-sm text-right font-medium text-green-600 dark:text-green-400">
+                            {formatCurrency(asset.bookValue)}
+                          </TableCell>
+                          <TableCell className="text-sm text-right">
+                            <span className={asset.depreciatedPercent >= 90 ? "text-destructive" : asset.depreciatedPercent >= 50 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}>
+                              {asset.depreciatedPercent.toFixed(1)}%
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between pt-2 px-1">
+                      <p className="text-xs text-muted-foreground">
+                        Showing {((assetPage - 1) * ASSETS_PER_PAGE) + 1}–{Math.min(assetPage * ASSETS_PER_PAGE, filtered.length)} of {filtered.length} assets
+                      </p>
+                      <div className="flex items-center gap-1">
+                        <Button variant="outline" size="icon" className="h-7 w-7" disabled={assetPage <= 1} onClick={() => setAssetPage(p => p - 1)}>
+                          <ChevronLeft className="h-3.5 w-3.5" />
+                        </Button>
+                        <span className="text-xs text-muted-foreground px-2">Page {assetPage} of {totalPages}</span>
+                        <Button variant="outline" size="icon" className="h-7 w-7" disabled={assetPage >= totalPages} onClick={() => setAssetPage(p => p + 1)}>
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </CardContent>
         </Card>
       )}
@@ -458,7 +499,6 @@ export default function DepreciationDashboard() {
                 <Input type="number" min={0} max={100} step={0.5} value={salvagePercent} onChange={(e) => setSalvagePercent(parseFloat(e.target.value) || 0)} />
               </div>
             </div>
-            {/* Preview */}
             <div className="p-3 bg-muted rounded-lg text-sm space-y-1">
               <p className="font-medium text-xs text-muted-foreground">Preview ({currencySymbol}100,000 asset)</p>
               <p>Depreciable amount: {formatCurrency(100000 * (1 - salvagePercent / 100))}</p>

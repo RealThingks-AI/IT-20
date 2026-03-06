@@ -3,11 +3,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { FileImage, Trash2, Plus } from "lucide-react";
+import { FileImage, Trash2, Info } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
@@ -19,18 +17,14 @@ interface AssetPhoto {
   created_at: string | null;
 }
 
-const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "webp"];
-
 export function PhotoGalleryDialog() {
   const queryClient = useQueryClient();
-  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [deletePhotoConfirm, setDeletePhotoConfirm] = useState<AssetPhoto | null>(null);
 
   // Query distinct photo_urls from itam_assets to get deduplicated list
   const { data: assetPhotos, refetch: refetchPhotos } = useQuery({
     queryKey: ["asset-photos-storage"],
     queryFn: async () => {
-      // Only query distinct photo_urls from the database (source of truth)
       const { data: assets } = await supabase
         .from("itam_assets")
         .select("custom_fields")
@@ -67,36 +61,41 @@ export function PhotoGalleryDialog() {
     },
   });
 
-  // Storage scanning removed — DB is the sole source of truth for photos
-
-  const uploadPhotoMutation = useMutation({
-    mutationFn: async (file: File) => {
-      const fileExt = file.name.split(".").pop();
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-      const filePath = `migrated/${fileName}`;
-      const { error: uploadError } = await supabase.storage.from("asset-photos").upload(filePath, file);
-      if (uploadError) throw uploadError;
-    },
-    onSuccess: () => { toast.success("Photo uploaded successfully"); queryClient.invalidateQueries({ queryKey: ["asset-photos-storage"] }); refetchPhotos(); },
-    onError: (error) => { toast.error("Failed to upload photo"); console.error(error); },
-  });
-
   const deletePhotoMutation = useMutation({
     mutationFn: async (photo: AssetPhoto) => {
+      // 1. Remove from storage
       const { error: storageError } = await supabase.storage.from("asset-photos").remove([photo.path]);
       if (storageError) throw storageError;
+
+      // 2. Clear DB references: nullify photo_url in any asset referencing this photo
+      const { data: affectedAssets } = await supabase
+        .from("itam_assets")
+        .select("id, custom_fields")
+        .eq("is_active", true)
+        .not("custom_fields->>photo_url", "is", null);
+
+      if (affectedAssets) {
+        for (const asset of affectedAssets) {
+          const cf = asset.custom_fields as Record<string, unknown> | null;
+          if (cf?.photo_url === photo.photo_url) {
+            const updatedCf = { ...cf } as Record<string, unknown>;
+            delete updatedCf.photo_url;
+            await supabase
+              .from("itam_assets")
+              .update({ custom_fields: updatedCf as any })
+              .eq("id", asset.id);
+          }
+        }
+      }
     },
-    onSuccess: () => { toast.success("Photo deleted successfully"); queryClient.invalidateQueries({ queryKey: ["asset-photos-storage"] }); refetchPhotos(); },
+    onSuccess: () => {
+      toast.success("Photo deleted and references cleared");
+      queryClient.invalidateQueries({ queryKey: ["asset-photos-storage"] });
+      queryClient.invalidateQueries({ queryKey: ["itam-assets"] });
+      refetchPhotos();
+    },
     onError: (error) => { toast.error("Failed to delete photo"); console.error(error); },
   });
-
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) { toast.error("Please upload an image file"); return; }
-    setUploadingPhoto(true);
-    try { await uploadPhotoMutation.mutateAsync(file); } finally { setUploadingPhoto(false); e.target.value = ""; }
-  };
 
   return (
     <>
@@ -119,17 +118,15 @@ export function PhotoGalleryDialog() {
         <DialogContent className="max-w-5xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Asset Photo Gallery</DialogTitle>
-            <DialogDescription>Browse, upload, and manage asset photos</DialogDescription>
+            <DialogDescription>Browse and manage asset photos</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <Label htmlFor="photo-upload" className="cursor-pointer">
-                <Button variant="outline" size="sm" disabled={uploadingPhoto} asChild>
-                  <span><Plus className="h-4 w-4 mr-2" />{uploadingPhoto ? "Uploading..." : "Add Photo"}</span>
-                </Button>
-              </Label>
-              <Input id="photo-upload" type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+            {/* Info banner — photos are added from asset detail */}
+            <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg text-sm text-muted-foreground">
+              <Info className="h-4 w-4 shrink-0" />
+              <span>Photos are added from the asset detail view. This gallery shows all photos currently linked to assets.</span>
             </div>
+
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-4">
               {assetPhotos?.map((photo) => (
                 <div key={photo.photo_url} className="relative group">
@@ -148,7 +145,8 @@ export function PhotoGalleryDialog() {
               {(!assetPhotos || assetPhotos.length === 0) && (
                 <div className="col-span-full text-center py-12 text-muted-foreground">
                   <FileImage className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                  <p className="text-sm">No photos available. Upload your first photo!</p>
+                  <p className="text-sm">No photos linked to any assets yet.</p>
+                  <p className="text-xs mt-1">Add photos from the asset detail view.</p>
                 </div>
               )}
             </div>
@@ -161,7 +159,7 @@ export function PhotoGalleryDialog() {
         onOpenChange={(open) => !open && setDeletePhotoConfirm(null)}
         onConfirm={() => { if (deletePhotoConfirm) deletePhotoMutation.mutate(deletePhotoConfirm); setDeletePhotoConfirm(null); }}
         title="Delete Photo"
-        description="Are you sure you want to delete this photo? This action cannot be undone."
+        description="Are you sure you want to delete this photo? This will also remove the photo reference from any linked assets. This action cannot be undone."
         confirmText="Delete"
         variant="destructive"
       />

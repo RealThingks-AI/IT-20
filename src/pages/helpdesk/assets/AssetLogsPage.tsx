@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,11 +9,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Search, ClipboardList, LogIn, LogOut, Activity, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, ClipboardList, LogIn, LogOut, Activity, Loader2 } from "lucide-react";
 import { FormattedDate } from "@/components/FormattedDate";
 import { Link } from "react-router-dom";
 import { sanitizeSearchInput } from "@/lib/utils";
+import { StatCard } from "@/components/helpdesk/assets/StatCard";
+import { PaginationControls } from "@/components/helpdesk/assets/PaginationControls";
 
 const PAGE_SIZE = 50;
 
@@ -30,20 +32,49 @@ function formatAction(action: string) {
 }
 
 export default function AssetLogsPage() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [actionFilter, setActionFilter] = useState("all");
   const [datePreset, setDatePreset] = useState("all");
   const [page, setPage] = useState(0);
   const [selectedLog, setSelectedLog] = useState<any>(null);
 
-  const { data: usersMap } = useQuery({
+  const { data: usersMap, isLoading: usersLoading } = useQuery({
     queryKey: ["users-map-logs"],
     staleTime: 10 * 60 * 1000,
     queryFn: async () => {
-      const { data } = await supabase.from("users").select("id, name, email");
+      const { data } = await supabase.from("users").select("id, auth_user_id, name, email");
       const map: Record<string, string> = {};
-      data?.forEach((u) => { map[u.id] = u.name || u.email || u.id; });
+      data?.forEach((u) => {
+        const displayName = u.name || u.email || u.id;
+        map[u.id] = displayName;
+        if (u.auth_user_id) map[u.auth_user_id] = displayName;
+      });
       return map;
+    },
+  });
+
+  const resolveUser = (id: string | null | undefined) => {
+    if (!id) return "—";
+    if (usersLoading || !usersMap) return "...";
+    return usersMap[id] || "Unknown";
+  };
+
+  // Separate query for total stats (not affected by pagination)
+  const { data: statCounts } = useQuery({
+    queryKey: ["asset-log-stats"],
+    staleTime: 2 * 60 * 1000,
+    queryFn: async () => {
+      const [checkouts, checkins, changes] = await Promise.all([
+        supabase.from("itam_asset_history").select("*", { count: "exact", head: true }).eq("action", "checked_out"),
+        supabase.from("itam_asset_history").select("*", { count: "exact", head: true }).eq("action", "checked_in"),
+        supabase.from("itam_asset_history").select("*", { count: "exact", head: true }).in("action", ["disposed", "reassigned", "returned_to_stock", "status_changed", "lost", "updated"]),
+      ]);
+      return {
+        checkouts: checkouts.count || 0,
+        checkins: checkins.count || 0,
+        changes: changes.count || 0,
+      };
     },
   });
 
@@ -72,45 +103,35 @@ export default function AssetLogsPage() {
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
   return (
-    <ScrollArea className="h-full">
-      <div className="p-4 space-y-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[
-            { label: "Total Logs", value: total, icon: ClipboardList, color: "text-primary" },
-            { label: "Check Outs (page)", value: logs.filter((l: any) => l.action === "checkout").length, icon: LogOut, color: "text-warning" },
-            { label: "Check Ins (page)", value: logs.filter((l: any) => l.action === "checkin").length, icon: LogIn, color: "text-success" },
-            { label: "Changes (page)", value: logs.filter((l: any) => ["status_change", "updated"].includes(l.action)).length, icon: Activity, color: "text-secondary" },
-          ].map((s) => (
-            <Card key={s.label}>
-              <CardContent className="p-3 flex items-center gap-3">
-                <s.icon className={`h-5 w-5 ${s.color}`} />
-                <div>
-                  <p className="text-xs text-muted-foreground">{s.label}</p>
-                  <p className="text-lg font-semibold">{s.value}</p>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatCard icon={ClipboardList} value={total} label="Total Logs" colorClass="bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400" />
+        <StatCard icon={LogOut} value={statCounts?.checkouts ?? "—"} label="Check Outs" colorClass="bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400" />
+        <StatCard icon={LogIn} value={statCounts?.checkins ?? "—"} label="Check Ins" colorClass="bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400" />
+        <StatCard icon={Activity} value={statCounts?.changes ?? "—"} label="Status Changes" colorClass="bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400" />
+      </div>
 
         <div className="flex flex-wrap gap-2">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Search logs..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} className="pl-8 h-9" />
-          </div>
-          <Select value={actionFilter} onValueChange={(v) => { setActionFilter(v); setPage(0); }}>
-            <SelectTrigger className="w-[150px] h-9"><SelectValue /></SelectTrigger>
+          <div className="relative max-w-sm flex-1 min-w-[200px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input placeholder="Search logs..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} className="pl-9 h-8" />
+        </div>
+        <Select value={actionFilter} onValueChange={(v) => { setActionFilter(v); setPage(0); }}>
+          <SelectTrigger className="w-[150px] h-8"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Actions</SelectItem>
-              <SelectItem value="checkout">Check Out</SelectItem>
-              <SelectItem value="checkin">Check In</SelectItem>
-              <SelectItem value="status_change">Status Change</SelectItem>
+              <SelectItem value="checked_out">Check Out</SelectItem>
+              <SelectItem value="checked_in">Check In</SelectItem>
+              <SelectItem value="reassigned">Reassigned</SelectItem>
+              <SelectItem value="returned_to_stock">Returned to Stock</SelectItem>
+              <SelectItem value="disposed">Disposed</SelectItem>
+              <SelectItem value="lost">Lost</SelectItem>
               <SelectItem value="created">Created</SelectItem>
               <SelectItem value="updated">Updated</SelectItem>
             </SelectContent>
           </Select>
           <Select value={datePreset} onValueChange={(v) => { setDatePreset(v); setPage(0); }}>
-            <SelectTrigger className="w-[130px] h-9"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-[130px] h-8"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Time</SelectItem>
               <SelectItem value="today">Today</SelectItem>
@@ -122,23 +143,32 @@ export default function AssetLogsPage() {
 
         <Card>
           <Table>
-            <TableHeader>
+            <TableHeader className="bg-muted/50">
               <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Asset</TableHead>
-                <TableHead>Action</TableHead>
-                <TableHead>Field</TableHead>
-                <TableHead>Old / New</TableHead>
-                <TableHead>By</TableHead>
+                <TableHead className="font-medium text-xs uppercase text-muted-foreground">Date</TableHead>
+                <TableHead className="font-medium text-xs uppercase text-muted-foreground">Asset</TableHead>
+                <TableHead className="font-medium text-xs uppercase text-muted-foreground">Action</TableHead>
+                <TableHead className="font-medium text-xs uppercase text-muted-foreground">Old / New</TableHead>
+                <TableHead className="font-medium text-xs uppercase text-muted-foreground">By</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} className="text-center py-12">
+                  <div className="flex flex-col items-center justify-center">
+                    <Loader2 className="h-6 w-6 text-muted-foreground animate-spin mb-2" />
+                    <p className="text-sm text-muted-foreground">Loading logs...</p>
+                  </div>
+                </TableCell></TableRow>
               ) : logs.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No logs found</TableCell></TableRow>
+              <TableRow><TableCell colSpan={5} className="text-center py-12">
+                <div className="flex flex-col items-center justify-center">
+                  <ClipboardList className="h-8 w-8 text-muted-foreground mb-2 opacity-50" />
+                  <p className="text-sm text-muted-foreground">No logs found</p>
+                </div>
+              </TableCell></TableRow>
               ) : logs.map((log: any) => (
-                <TableRow key={log.id} className="cursor-pointer hover:bg-accent/50" onClick={() => setSelectedLog(log)}>
+                <TableRow key={log.id} className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => setSelectedLog(log)}>
                   <TableCell className="text-xs"><FormattedDate date={log.created_at} /></TableCell>
                   <TableCell>
                     {log.itam_assets ? (
@@ -146,24 +176,25 @@ export default function AssetLogsPage() {
                     ) : <span className="text-xs text-muted-foreground">-</span>}
                   </TableCell>
                   <TableCell><Badge variant="outline" className="text-xs">{formatAction(log.action)}</Badge></TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{log.field_name || "-"}</TableCell>
-                  <TableCell className="text-xs max-w-[200px] truncate">{log.old_value || log.new_value ? `${log.old_value || "-"} -> ${log.new_value || "-"}` : "-"}</TableCell>
-                  <TableCell className="text-xs">{usersMap?.[log.performed_by] || "System"}</TableCell>
+                  <TableCell className="text-xs max-w-[200px] truncate">{log.old_value || log.new_value ? `${log.old_value || "-"} → ${log.new_value || "-"}` : "-"}</TableCell>
+                  <TableCell className="text-xs">
+                    {log.performed_by ? (
+                      <span className="text-primary hover:underline cursor-pointer" onClick={(e) => { e.stopPropagation(); navigate(`/assets/employees?user=${log.performed_by}`); }}>{resolveUser(log.performed_by)}</span>
+                    ) : "—"}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </Card>
 
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-muted-foreground">Page {page + 1} of {totalPages}</p>
-            <div className="flex gap-1">
-              <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage((p) => p - 1)}><ChevronLeft className="h-4 w-4" /></Button>
-              <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)}><ChevronRight className="h-4 w-4" /></Button>
-            </div>
-          </div>
-        )}
+        <PaginationControls
+          currentPage={page + 1}
+          totalPages={totalPages}
+          totalItems={total}
+          itemsPerPage={PAGE_SIZE}
+          onPageChange={(p) => setPage(p - 1)}
+        />
 
         <Sheet open={!!selectedLog} onOpenChange={() => setSelectedLog(null)}>
           <SheetContent>
@@ -173,12 +204,27 @@ export default function AssetLogsPage() {
                 <div><span className="text-muted-foreground">Date:</span> <FormattedDate date={selectedLog.created_at} /></div>
                 <div><span className="text-muted-foreground">Action:</span> <Badge variant="outline">{formatAction(selectedLog.action)}</Badge></div>
                 <div><span className="text-muted-foreground">Asset:</span> {selectedLog.itam_assets?.asset_tag || "N/A"}</div>
-                <div><span className="text-muted-foreground">By:</span> {usersMap?.[selectedLog.performed_by] || "System"}</div>
+                {selectedLog.old_value && <div><span className="text-muted-foreground">Old Value:</span> {selectedLog.old_value}</div>}
+                {selectedLog.new_value && <div><span className="text-muted-foreground">New Value:</span> {selectedLog.new_value}</div>}
+                <div><span className="text-muted-foreground">By:</span> {resolveUser(selectedLog.performed_by)}</div>
+                {selectedLog.details && (
+                  <div className="space-y-1">
+                    <span className="text-muted-foreground">Details:</span>
+                    <div className="bg-muted rounded-md p-3 space-y-1">
+                      {Object.entries(typeof selectedLog.details === 'string' ? JSON.parse(selectedLog.details) : selectedLog.details).map(([k, v]) => (
+                        <div key={k} className="flex gap-2 text-xs">
+                          <span className="text-muted-foreground font-medium min-w-[100px]">{k}:</span>
+                          <span>{String(v)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="text-xs text-muted-foreground pt-2 border-t">Log ID: {selectedLog.id}</div>
               </div>
             )}
           </SheetContent>
         </Sheet>
-      </div>
-    </ScrollArea>
+    </div>
   );
 }

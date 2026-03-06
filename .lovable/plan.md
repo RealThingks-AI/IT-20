@@ -1,73 +1,95 @@
 
+## Plan: Subscriptions App — Full Audit Fixes + User Assignment for License Seats
 
-# Fix: Remove Duplicate Photos (425 → Under 100)
+### What we're building
 
-## Root Cause Analysis
+Combining the approved comprehensive audit fixes with the new user-assignment feature: when assigning a license seat, users can be picked directly from the system's user list (instead of typing name/email manually).
 
-The database confirms the duplication:
-- **322 assets** have a `photo_url` set
-- Only **112 distinct URLs** exist in the DB
-- Only **103 truly unique original images** (by `original_photo_url`)
-- The gallery shows **425** because it also scans storage for "orphaned" files — these orphans ARE the old duplicates that were never cleaned up
-- 15 assets still point to external `assettiger.com` URLs
+---
 
-The 425 count = 112 DB-referenced URLs + ~313 orphaned storage files (old duplicates with UUID filenames that the dedup edge function didn't finish cleaning because it timed out).
+### Changes Overview
 
-## Plan
+#### 1. `AddLicenseDialog.tsx` — User Picker for "Assigned To"
+**Current**: Two free-text inputs (Name + Email) — user must type manually.
+**New**: A searchable user-picker Combobox (same pattern as `AddToolDialog`'s owner picker). When a user is selected from the dropdown, `assigned_to_name`, `assigned_to_email`, and `assigned_to` (user UUID from `users.id`) are auto-filled. Status auto-flips to `"assigned"` when a user is picked. Status auto-resets to `"available"` when cleared.
 
-### 1. Fix the edge function to work in batches (avoid timeout)
+Key changes:
+- Add `user_id` field to form schema (stores `users.id`)
+- Import `useUsers` hook
+- Replace two manual text inputs with a single searchable Combobox showing `name (email)` per user
+- Keep manual name/email inputs as fallback when no system user is selected (for external contractors etc.)
+- On submit: set `assigned_to = selected_user.id`
+- Fix tool query: remove `.eq("status", "active")` filter — include `trial` and `expiring_soon`
 
-The `deduplicate-asset-photos` function timed out previously because it tried to download and hash all files in one go. Update it to:
-- Process files in smaller batches
-- Skip files already named with a SHA-256 hash pattern (already canonical)
-- Focus on deleting storage files that are NOT referenced by any `itam_assets.custom_fields->>'photo_url'`
+---
 
-### 2. Stop scanning storage for orphans in the UI
+#### 2. `LicensesList.tsx` — Show User Reference + Stat Cards
+- Add 4 stat cards row: Total, Assigned, Available, Expiring Soon
+- Add row background highlighting: amber for expiring ≤30d, red for expired status
+- "Assigned To" cell: if `assigned_to` is a user UUID, show it linked (resolved via `useUsersLookup`)
 
-The core fix: both `PhotoGalleryDialog` and `AssetPhotoSelector` currently scan storage for "orphaned images not linked to assets." This is what inflates 112 to 425. These orphans are duplicates awaiting cleanup — they should NOT be shown.
+---
 
-**Change both components to only show distinct `photo_url` values from `itam_assets`** (the DB is already the source of truth with 112 unique URLs). Remove the `scanStorageFolder` / `addFromStorage` calls entirely.
+#### 3. `SubscriptionLayout.tsx` — Sidebar Restructure
+- Remove `"New Subscription"` sidebar item (add button exists on list page)
+- Add `"Licenses"`, `"Payments"`, `"Vendors"` as direct sidebar links (pointing to `/subscription/advanced?tab=licenses` etc.)
 
-### 3. Migrate remaining 15 external URLs
+---
 
-Update the edge function to also handle the 15 remaining `assettiger.com` references by downloading, hashing, and storing them in `migrated/`.
+#### 4. `advanced.tsx` — Fix Portal Bug + Remove Placeholder Tabs
+- Fix the `TabsTrigger` portal bug: `TabsTrigger`s rendered via portal have no `Tabs` ancestor, so `data-[state=active]` never fires. Replace with manual `Button`-based tab bar using `cn()` for active state, driven by `activeTab` state.
+- Remove `"Reports"` tab (all 4 cards say "coming soon" — non-functional, misleading)
+- Remove `"Alerts"` tab (switches have no state/persistence)
+- Remove `"Settings"` tab (selects never save, hardcoded `defaultValue`)
+- Keep: Licenses, Payments, Vendors, Import/Export
 
-## Files to Modify
+---
 
-| File | Change |
-|------|--------|
-| `src/components/helpdesk/assets/PhotoGalleryDialog.tsx` | Remove `scanStorageFolder` — only query distinct `photo_url` from DB |
-| `src/components/helpdesk/assets/AssetPhotoSelector.tsx` | Remove `addFromStorage` — only query distinct `photo_url` from DB |
-| `supabase/functions/deduplicate-asset-photos/index.ts` | Add orphan cleanup: delete storage files not referenced by any asset |
+#### 5. `dashboard.tsx` — Stat Cards + INR Display
+- Consolidate from 2 rows (10 cards) to 1 row of 6: Total, Active, Expiring Soon, Monthly Recurring, Annual Cost, Active Vendors
+- Add tooltip/note `"~INR"` on currency aggregate fields
 
-## Technical Details
+---
 
-### UI changes (both components)
+#### 6. `ToolsList.tsx` — Search Fix
+- Add client-side fallback search across vendor name, department, category (currently only searches `tool_name` via DB ilike)
 
-Remove the storage scanning entirely. The query becomes:
-```
-SELECT DISTINCT custom_fields->>'photo_url' as photo_url
-FROM itam_assets
-WHERE is_active = true
-  AND custom_fields->>'photo_url' IS NOT NULL
-  AND custom_fields->>'photo_url' LIKE '%supabase%'
-```
+---
 
-This gives exactly 97 unique Supabase-hosted URLs (112 minus 15 external) — well under 100.
+#### 7. `detail/[subscriptionId].tsx` — Notes Tab + owned/one_time display
+- Load existing `subscription.notes` into `notesValue` via `useEffect` when data arrives
+- Show notes as read-only text by default, "Edit" button to switch to textarea
+- Hide Monthly/Annual Equiv rows for `owned`/`one_time` types (show "N/A — One-time cost")
+- Fix license utilization card visibility: show when `licenses.length > 0 || seatCount > 0`
 
-### Edge function: orphan cleanup phase
+---
 
-After the existing hash-based dedup, add a new phase:
-1. List all files in `migrated/`
-2. Get all distinct `photo_url` values from `itam_assets`
-3. For each storage file, check if its public URL appears in the DB
-4. If not referenced by any asset, delete it from storage
-5. Also migrate the 15 remaining external URLs
+#### 8. `VendorsList.tsx` — Website + Asset Count
+- Add clickable Website column (if vendor has website)
+- Add Assets count column from the already-fetched `subscriptions_tools(id)` join
 
-This cleans up the ~313 orphaned files left from incomplete previous migrations.
+---
 
-### Expected outcome
-- Gallery count drops from 425 to ~97 unique photos
-- Storage gets cleaned of ~313+ orphaned duplicate files
-- No visual duplicates remain
+#### 9. `PaymentsList.tsx` + `AddPaymentDialog.tsx`
+- Fix "Total Payments" label → "Filtered Total" with note when filters active
+- Fix `AddPaymentDialog` amount Zod schema: `z.string()` → `z.coerce.number().min(0.01)`
+- Remove `.eq("status", "active")` filter on tools dropdown
 
+---
+
+### Files to Modify
+
+| File | Changes |
+|------|---------|
+| `src/components/Subscriptions/AddLicenseDialog.tsx` | User-picker Combobox, fix tool query |
+| `src/components/Subscriptions/LicensesList.tsx` | Stat cards, row highlighting |
+| `src/layouts/SubscriptionLayout.tsx` | Sidebar restructure |
+| `src/pages/helpdesk/subscription/advanced.tsx` | Fix portal/tab bug, remove 3 placeholder tabs |
+| `src/pages/helpdesk/subscription/dashboard.tsx` | Consolidate stat cards, INR note |
+| `src/components/Subscriptions/ToolsList.tsx` | Client-side search fix |
+| `src/pages/helpdesk/subscription/detail/[subscriptionId].tsx` | Notes tab fix, owned/one_time display, utilization fix |
+| `src/components/Subscriptions/VendorsList.tsx` | Website column, asset count column |
+| `src/components/Subscriptions/PaymentsList.tsx` | Label fix |
+| `src/components/Subscriptions/AddPaymentDialog.tsx` | Amount schema fix, tool query fix |
+
+No database schema changes needed — `subscriptions_licenses.assigned_to` column already exists (stores a UUID), `assigned_to_name` and `assigned_to_email` also exist. We just populate them properly from the user picker.

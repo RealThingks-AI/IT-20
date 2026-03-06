@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,6 +16,7 @@ import { getStatusLabel } from "@/lib/assetStatusUtils";
 import { invalidateAllAssetQueries } from "@/lib/assetQueryUtils";
 import { useUsers } from "@/hooks/useUsers";
 import { toast } from "sonner";
+import { getAvatarColor } from "@/lib/avatarUtils";
 
 interface Employee {
   id: string;
@@ -46,6 +47,11 @@ export function EmployeeAssetsDialog({ employee, open, onOpenChange }: EmployeeA
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkAction, setBulkAction] = useState<"reassign" | "return" | null>(null);
   const [bulkReassignUserId, setBulkReassignUserId] = useState("");
+
+  // Reset selection when employee changes
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [employee?.id]);
 
   // Fetch assets assigned to this employee
   const { data: assets = [], isLoading } = useQuery({
@@ -116,11 +122,22 @@ export function EmployeeAssetsDialog({ employee, open, onOpenChange }: EmployeeA
         assigned_at: new Date().toISOString(),
       });
 
+      // Resolve names for history
+      const fromName = employee?.name || employee?.email || employee?.id || "Unknown";
+      const toUser = allUsers.find(u => u.id === newUserId);
+      const toName = toUser?.name || toUser?.email || newUserId;
+
+      // Fetch asset tag
+      const { data: assetRecord } = await supabase.from("itam_assets").select("asset_tag").eq("id", assetId).single();
+
       // Log to history
       await supabase.from("itam_asset_history").insert({
         asset_id: assetId,
         action: "reassigned",
-        details: { from: employee?.id, to: newUserId },
+        old_value: fromName,
+        new_value: toName,
+        asset_tag: assetRecord?.asset_tag || null,
+        details: { from: fromName, to: toName },
         performed_by: user?.id,
       });
     },
@@ -166,12 +183,18 @@ export function EmployeeAssetsDialog({ employee, open, onOpenChange }: EmployeeA
         }
       }
 
-      // Log to history
+      // Log to history with resolved names
       const { data: { user } } = await supabase.auth.getUser();
+      const returnedFromName = employee?.name || employee?.email || employee?.id || "Unknown";
+      const { data: assetRec } = await supabase.from("itam_assets").select("asset_tag").eq("id", assetId).single();
+
       await supabase.from("itam_asset_history").insert({
         asset_id: assetId,
         action: "returned_to_stock",
-        details: { returned_from: employee?.id },
+        old_value: returnedFromName,
+        new_value: "Available",
+        asset_tag: assetRec?.asset_tag || null,
+        details: { returned_from: returnedFromName },
         performed_by: user?.id,
       });
     },
@@ -186,33 +209,89 @@ export function EmployeeAssetsDialog({ employee, open, onOpenChange }: EmployeeA
     onError: (err: Error) => toast.error("Failed to return: " + err.message),
   });
 
-  // Bulk return mutation
+  // Bulk return mutation — direct DB calls to avoid N toasts
   const bulkReturnMutation = useMutation({
     mutationFn: async (assetIds: string[]) => {
+      const { data: { user } } = await supabase.auth.getUser();
       for (const assetId of assetIds) {
-        await returnMutation.mutateAsync(assetId);
+        await supabase.from("itam_assets").update({
+          assigned_to: null, status: "available", updated_at: new Date().toISOString(),
+          checked_out_to: null, checked_out_at: null, expected_return_date: null, check_out_notes: null,
+        }).eq("id", assetId);
+
+        if (employee) {
+          const ids = [employee.id, employee.auth_user_id].filter(Boolean) as string[];
+          for (const uid of ids) {
+            await supabase.from("itam_asset_assignments")
+              .update({ returned_at: new Date().toISOString() })
+              .eq("asset_id", assetId).eq("assigned_to", uid).is("returned_at", null);
+          }
+        }
+
+        const returnFromName = employee?.name || employee?.email || employee?.id || "Unknown";
+        await supabase.from("itam_asset_history").insert({
+          asset_id: assetId, action: "returned_to_stock",
+          old_value: returnFromName, new_value: "Available",
+          details: { returned_from: returnFromName }, performed_by: user?.id,
+        });
       }
     },
     onSuccess: () => {
       toast.success(`${selectedIds.size} assets returned to stock`);
+      invalidateAllAssetQueries(queryClient);
+      queryClient.invalidateQueries({ queryKey: ["employee-assigned-assets"] });
+      queryClient.invalidateQueries({ queryKey: ["employee-asset-history"] });
+      queryClient.invalidateQueries({ queryKey: ["employee-asset-counts"] });
       setSelectedIds(new Set());
       setBulkAction(null);
     },
+    onError: (err: Error) => toast.error("Bulk return failed: " + err.message),
   });
 
-  // Bulk reassign mutation
+  // Bulk reassign mutation — direct DB calls to avoid N toasts
   const bulkReassignMutation = useMutation({
     mutationFn: async ({ assetIds, newUserId }: { assetIds: string[]; newUserId: string }) => {
+      const { data: { user } } = await supabase.auth.getUser();
       for (const assetId of assetIds) {
-        await reassignMutation.mutateAsync({ assetId, newUserId });
+        await supabase.from("itam_assets")
+          .update({ assigned_to: newUserId, status: "in_use", updated_at: new Date().toISOString() })
+          .eq("id", assetId);
+
+        if (employee) {
+          const ids = [employee.id, employee.auth_user_id].filter(Boolean) as string[];
+          for (const uid of ids) {
+            await supabase.from("itam_asset_assignments")
+              .update({ returned_at: new Date().toISOString() })
+              .eq("asset_id", assetId).eq("assigned_to", uid).is("returned_at", null);
+          }
+        }
+
+        await supabase.from("itam_asset_assignments").insert({
+          asset_id: assetId, assigned_to: newUserId,
+          assigned_by: user?.id || null, assigned_at: new Date().toISOString(),
+        });
+
+        const bulkFromName = employee?.name || employee?.email || employee?.id || "Unknown";
+        const bulkToUser = allUsers.find(u => u.id === newUserId);
+        const bulkToName = bulkToUser?.name || bulkToUser?.email || newUserId;
+        await supabase.from("itam_asset_history").insert({
+          asset_id: assetId, action: "reassigned",
+          old_value: bulkFromName, new_value: bulkToName,
+          details: { from: bulkFromName, to: bulkToName }, performed_by: user?.id,
+        });
       }
     },
     onSuccess: () => {
       toast.success(`${selectedIds.size} assets reassigned`);
+      invalidateAllAssetQueries(queryClient);
+      queryClient.invalidateQueries({ queryKey: ["employee-assigned-assets"] });
+      queryClient.invalidateQueries({ queryKey: ["employee-asset-history"] });
+      queryClient.invalidateQueries({ queryKey: ["employee-asset-counts"] });
       setSelectedIds(new Set());
       setBulkAction(null);
       setBulkReassignUserId("");
     },
+    onError: (err: Error) => toast.error("Bulk reassign failed: " + err.message),
   });
 
   const toggleSelect = (id: string) => {
@@ -239,6 +318,9 @@ export function EmployeeAssetsDialog({ employee, open, onOpenChange }: EmployeeA
     ? employee.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
     : employee.email[0].toUpperCase();
 
+  // Deterministic avatar color
+  const avatarColor = getAvatarColor(employee.name || employee.email);
+
   const statusColor: Record<string, string> = {
     available: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
     in_use: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
@@ -253,7 +335,7 @@ export function EmployeeAssetsDialog({ employee, open, onOpenChange }: EmployeeA
           <DialogHeader>
             <DialogTitle className="flex items-center gap-3">
               <Avatar className="h-10 w-10">
-                <AvatarFallback className="bg-primary/10 text-primary font-medium">{initials}</AvatarFallback>
+                <AvatarFallback className={`font-medium ${avatarColor}`}>{initials}</AvatarFallback>
               </Avatar>
               <div>
                 <p className="text-lg font-semibold">{employee.name || "Unknown User"}</p>
@@ -263,6 +345,7 @@ export function EmployeeAssetsDialog({ employee, open, onOpenChange }: EmployeeA
                 </p>
               </div>
             </DialogTitle>
+            <DialogDescription>View and manage assets assigned to this employee.</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-6 mt-2">
@@ -320,6 +403,7 @@ export function EmployeeAssetsDialog({ employee, open, onOpenChange }: EmployeeA
                         )}
                       </TableHead>
                       
+                      <TableHead className="font-medium text-xs uppercase text-muted-foreground">Name</TableHead>
                       <TableHead className="font-medium text-xs uppercase text-muted-foreground">Asset Tag</TableHead>
                       <TableHead className="font-medium text-xs uppercase text-muted-foreground">Category</TableHead>
                       <TableHead className="font-medium text-xs uppercase text-muted-foreground">Status</TableHead>
@@ -329,14 +413,22 @@ export function EmployeeAssetsDialog({ employee, open, onOpenChange }: EmployeeA
                   <TableBody>
                     {isLoading ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center py-8">
+                       <TableCell colSpan={6} className="text-center py-8">
                           <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto" />
                         </TableCell>
                       </TableRow>
                     ) : assets.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                          No assets currently assigned
+                        <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">
+                          <Package className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                          <p className="text-sm">No assets currently assigned</p>
+                          <Button size="sm" variant="outline" className="mt-3" onClick={() => {
+                            onOpenChange(false);
+                            navigate(`/assets/checkout?user=${employee?.id}`);
+                          }}>
+                            <Package className="h-3.5 w-3.5 mr-1.5" />
+                            Assign an Asset
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -349,6 +441,7 @@ export function EmployeeAssetsDialog({ employee, open, onOpenChange }: EmployeeA
                               aria-label={`Select ${asset.name}`}
                             />
                           </TableCell>
+                          <TableCell className="font-medium text-sm">{asset.name || "—"}</TableCell>
                           <TableCell>
                             <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
                               {asset.asset_id || asset.asset_tag || "—"}

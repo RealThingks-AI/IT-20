@@ -15,7 +15,10 @@ import Login from "./pages/Login";
 
 const PageLoader = () => (
   <div className="min-h-screen flex items-center justify-center bg-background">
-    <div className="animate-pulse text-muted-foreground">Loading...</div>
+    <div className="flex flex-col items-center gap-3">
+      <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      <span className="text-xs text-muted-foreground">Loading…</span>
+    </div>
   </div>
 );
 
@@ -52,10 +55,11 @@ const HelpdeskProblemDetail = lazy(() => import("./pages/helpdesk/problems/[id]"
 const AssignmentRules = lazy(() => import("./pages/helpdesk/tickets/assignment-rules"));
 const LinkedProblems = lazy(() => import("./pages/helpdesk/tickets/linked-problems"));
 
-// Assets pages (eagerly loaded for perf)
-import AllAssets from "./pages/helpdesk/assets/allassets";
-import AssetDashboard from "./pages/helpdesk/assets/dashboard";
-import AssetAdvancedPage from "./pages/helpdesk/assets/advanced/index";
+// Assets pages (all lazy-loaded for faster initial bundle)
+const AllAssets = lazy(() => import("./pages/helpdesk/assets/allassets"));
+const AssetDashboard = lazy(() => import("./pages/helpdesk/assets/dashboard"));
+const AssetAdvancedPage = lazy(() => import("./pages/helpdesk/assets/advanced/index"));
+const AssetEmployeesPage = lazy(() => import("./pages/helpdesk/assets/employees"));
 
 const AssetDetail = lazy(() => import("./pages/helpdesk/assets/detail/[assetId]"));
 const AssetReports = lazy(() => import("./pages/helpdesk/assets/reports"));
@@ -66,17 +70,17 @@ const AssetDispose = lazy(() => import("./pages/helpdesk/assets/dispose"));
 const AssetReserve = lazy(() => import("./pages/helpdesk/assets/reserve"));
 const AddAsset = lazy(() => import("./pages/helpdesk/assets/add"));
 const DepreciationDashboard = lazy(() => import("./pages/helpdesk/assets/depreciation/index"));
-const VendorsList = lazy(() => import("./pages/helpdesk/assets/vendors/index"));
+
 const AddVendor = lazy(() => import("./pages/helpdesk/assets/vendors/add-vendor"));
 const VendorDetail = lazy(() => import("./pages/helpdesk/assets/vendors/detail/[vendorId]"));
 const LicensesList = lazy(() => import("./pages/helpdesk/assets/licenses/index"));
 const LicenseDetail = lazy(() => import("./pages/helpdesk/assets/licenses/detail/[licenseId]"));
 const AddLicense = lazy(() => import("./pages/helpdesk/assets/licenses/add-license"));
 const AllocateLicense = lazy(() => import("./pages/helpdesk/assets/licenses/allocate"));
-const RepairsList = lazy(() => import("./pages/helpdesk/assets/repairs/index"));
+
 const CreateRepair = lazy(() => import("./pages/helpdesk/assets/repairs/create"));
 const RepairDetail = lazy(() => import("./pages/helpdesk/assets/repairs/detail/[repairId]"));
-const AssetAudit = lazy(() => import("./pages/helpdesk/assets/audit/index"));
+
 const AssetLogs = lazy(() => import("./pages/helpdesk/assets/AssetLogsPage"));
 const AssetsBulkActions = lazy(() => import("./pages/helpdesk/assets/explore/bulk-actions"));
 const AssetsImportExport = lazy(() => import("./pages/helpdesk/assets/import-export"));
@@ -87,9 +91,9 @@ const PODetail = lazy(() => import("./pages/helpdesk/assets/purchase-orders/po-d
 // Subscription pages
 const HelpdeskSubscriptionDashboard = lazy(() => import("./pages/helpdesk/subscription/dashboard"));
 const HelpdeskSubscriptionTools = lazy(() => import("./pages/helpdesk/subscription/tools"));
-const HelpdeskSubscriptionVendors = lazy(() => import("./pages/helpdesk/subscription/vendors"));
-const HelpdeskSubscriptionLicenses = lazy(() => import("./pages/helpdesk/subscription/licenses"));
-const HelpdeskSubscriptionPayments = lazy(() => import("./pages/helpdesk/subscription/payments"));
+const NewSubscription = lazy(() => import("./pages/helpdesk/subscription/new"));
+const SubscriptionAdvanced = lazy(() => import("./pages/helpdesk/subscription/advanced"));
+const SubscriptionDetail = lazy(() => import("./pages/helpdesk/subscription/detail/[subscriptionId]"));
 
 // System Updates pages
 const HelpdeskSystemUpdates = lazy(() => import("./pages/helpdesk/system-updates"));
@@ -111,6 +115,7 @@ const AdminLogsPage = lazy(() => import("./pages/admin/logs"));
 const AdminSystemPage = lazy(() => import("./pages/admin/system"));
 const AdminBackupPage = lazy(() => import("./pages/admin/backup"));
 const AdminReportsPage = lazy(() => import("./pages/admin/reports"));
+const AdminEmailPage = lazy(() => import("./pages/admin/email"));
 
 // Auth
 const AuthConfirm = lazy(() => import("./pages/AuthConfirm"));
@@ -122,7 +127,7 @@ const Status = lazy(() => import("./pages/Status"));
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 5 * 60 * 1000,
+      staleTime: 2 * 60 * 1000,
       gcTime: 10 * 60 * 1000,
       refetchOnWindowFocus: false,
       retry: 1,
@@ -194,24 +199,25 @@ const App = () => {
                     <Route path="/assets/reserve" element={<AssetReserve />} />
                     <Route path="/assets/alerts" element={<AssetAlerts />} />
                     <Route path="/assets/advanced" element={<AssetAdvancedPage />} />
+                    <Route path="/assets/employees" element={<AssetEmployeesPage />} />
                     <Route path="/assets/detail/:assetId" element={<AssetDetail />} />
                     <Route path="/assets/reports" element={<AssetReports />} />
                     <Route path="/assets/import-export" element={<AssetsImportExport />} />
                     <Route path="/assets/depreciation" element={<DepreciationDashboard />} />
-                    <Route path="/assets/vendors" element={<VendorsList />} />
+                    <Route path="/assets/vendors" element={<Navigate to="/assets/advanced?tab=vendors" replace />} />
                     <Route path="/assets/vendors/add-vendor" element={<AddVendor />} />
                     <Route path="/assets/vendors/detail/:vendorId" element={<VendorDetail />} />
                     <Route path="/assets/licenses" element={<LicensesList />} />
-                    <Route path="/assets/licenses/:licenseId" element={<LicenseDetail />} />
                     <Route path="/assets/licenses/add-license" element={<AddLicense />} />
                     <Route path="/assets/licenses/allocate" element={<AllocateLicense />} />
-                    <Route path="/assets/repairs" element={<RepairsList />} />
+                    <Route path="/assets/licenses/detail/:licenseId" element={<LicenseDetail />} />
+                    <Route path="/assets/repairs" element={<Navigate to="/assets/advanced?tab=repairs" replace />} />
                     <Route path="/assets/repairs/create" element={<CreateRepair />} />
                     <Route path="/assets/repairs/detail/:repairId" element={<RepairDetail />} />
                     <Route path="/assets/purchase-orders" element={<PurchaseOrdersList />} />
                     <Route path="/assets/purchase-orders/create-po" element={<CreatePO />} />
                     <Route path="/assets/purchase-orders/po-detail/:poId" element={<PODetail />} />
-                    <Route path="/assets/audit" element={<AssetAudit />} />
+                    
                     <Route path="/assets/logs" element={<AssetLogs />} />
                     <Route path="/assets/explore/bulk-actions" element={<AssetsBulkActions />} />
                     
@@ -228,10 +234,14 @@ const App = () => {
                   <Route element={<SubscriptionLayout />}>
                     <Route path="/subscription" element={<HelpdeskSubscriptionDashboard />} />
                     <Route path="/subscription/tools" element={<HelpdeskSubscriptionTools />} />
-                    <Route path="/subscription/vendors" element={<HelpdeskSubscriptionVendors />} />
-                    <Route path="/subscription/licenses" element={<HelpdeskSubscriptionLicenses />} />
-                    <Route path="/subscription/payments" element={<HelpdeskSubscriptionPayments />} />
-                    
+                    <Route path="/subscription/new" element={<NewSubscription />} />
+                    <Route path="/subscription/advanced" element={<SubscriptionAdvanced />} />
+                    <Route path="/subscription/detail/:subscriptionId" element={<SubscriptionDetail />} />
+                    {/* Legacy redirects */}
+                    <Route path="/subscription/licenses" element={<Navigate to="/subscription/advanced?tab=licenses" replace />} />
+                    <Route path="/subscription/payments" element={<Navigate to="/subscription/advanced?tab=payments" replace />} />
+                    <Route path="/subscription/vendors" element={<Navigate to="/subscription/advanced?tab=vendors" replace />} />
+                    <Route path="/subscription/import-export" element={<Navigate to="/subscription/advanced?tab=import-export" replace />} />
                   </Route>
 
                   {/* ===== SYSTEM UPDATES MODULE ===== */}
@@ -251,6 +261,7 @@ const App = () => {
                     <Route path="/admin/system" element={<AdminSystemPage />} />
                     <Route path="/admin/backup" element={<AdminBackupPage />} />
                     <Route path="/admin/reports" element={<AdminReportsPage />} />
+                    <Route path="/admin/email" element={<AdminEmailPage />} />
                     
                   </Route>
 
