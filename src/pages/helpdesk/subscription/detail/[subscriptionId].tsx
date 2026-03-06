@@ -149,7 +149,7 @@ const SubscriptionDetail = () => {
   const rules = getSubscriptionFieldRules(subscription.category, subscription.subscription_type, subscription.status);
   const renewalDays = getDaysUntilRenewal(subscription.renewal_date);
   const renewalUrgency = renewalDays !== null ? getRenewalUrgency(renewalDays, subscription.subscription_type) : null;
-  const seatCount = subscription.license_count || 0;
+  const seatCount = subscription.quantity || subscription.license_count || 0;
   const usedSeats = licenses.filter((license: any) => license.status === "assigned").length;
   const utilizationPercent = seatCount > 0 ? Math.round((usedSeats / seatCount) * 100) : 0;
   const totalPayments = payments.reduce((sum: number, payment: any) => sum + (payment.amount || 0), 0);
@@ -255,7 +255,7 @@ const SubscriptionDetail = () => {
                 </Card>
               )}
 
-              {(licenses.length > 0 || seatCount > 0) && (
+              {seatCount > 0 && (
                 <Card>
                   <CardHeader className="pb-3"><CardTitle className="text-base flex items-center gap-2"><Users className="h-4 w-4" />License Usage</CardTitle></CardHeader>
                   <CardContent className="space-y-3 text-sm">
@@ -317,7 +317,7 @@ const SubscriptionDetail = () => {
                       </TableRow>
                     ) : licenses.map((license: any) => (
                       <TableRow key={license.id} className="transition-colors">
-                        <TableCell className="text-sm py-2">{license.assigned_to_name || license.assigned_to_email || license.license_key || license.user_id || "—"}</TableCell>
+                        <TableCell className="text-sm py-2">{license.assigned_to_name || license.assigned_to_email || license.license_key || "—"}</TableCell>
                         <TableCell className="py-2"><Badge variant={license.status === "assigned" ? "default" : "secondary"} className="text-xs">{license.status}</Badge></TableCell>
                         <TableCell className="text-xs text-muted-foreground py-2">{license.assigned_at ? format(new Date(license.assigned_at), "MMM d, yyyy") : "—"}</TableCell>
                         <TableCell className="text-xs text-muted-foreground py-2">{license.expires_at ? format(new Date(license.expires_at), "MMM d, yyyy") : "—"}</TableCell>
