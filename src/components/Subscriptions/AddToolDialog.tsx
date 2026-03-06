@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Plus, Search, Check, AlertTriangle } from "lucide-react";
+import { Plus, Search, Check, AlertTriangle, Users, X, ChevronsUpDown } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import { Switch } from "@/components/ui/switch";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useUsers } from "@/hooks/useUsers";
@@ -50,6 +51,7 @@ const formSchema = z.object({
   vendor_id: z.string().optional(),
   department: z.string().optional(),
   owner_name: z.string().optional(),
+  owner_id: z.string().optional(),
   contract_number: z.string().optional(),
   renewal_alert_days: z.coerce.number().int().min(0).default(30),
   auto_renew: z.boolean().default(false),
@@ -114,6 +116,7 @@ const getDefaultValues = (): FormValues => ({
   vendor_id: "",
   department: "",
   owner_name: "",
+  owner_id: "",
   contract_number: "",
   renewal_alert_days: 30,
   auto_renew: false,
@@ -176,6 +179,8 @@ export const AddToolDialog = ({ open, onOpenChange, onSuccess, editingTool }: Ad
   useEffect(() => {
     if (!open) return;
     if (editingTool) {
+      // Find the owner user by name to resolve UUID
+      const ownerUser = users?.find(u => u.name === editingTool.owner_name || u.email === editingTool.owner_name);
       form.reset({
         tool_name: editingTool.tool_name || "",
         category: editingTool.category || "",
@@ -190,6 +195,7 @@ export const AddToolDialog = ({ open, onOpenChange, onSuccess, editingTool }: Ad
         vendor_id: editingTool.vendor_id || "",
         department: editingTool.department || "",
         owner_name: editingTool.owner_name || "",
+        owner_id: ownerUser?.id || "",
         contract_number: editingTool.contract_number || "",
         renewal_alert_days: editingTool.renewal_alert_days || 30,
         auto_renew: Boolean(editingTool.auto_renew),
@@ -221,10 +227,67 @@ export const AddToolDialog = ({ open, onOpenChange, onSuccess, editingTool }: Ad
     }
   }, [watchType, form]);
 
+  const watchOwnerId = form.watch("owner_id");
   const selectedOwner = useMemo(() => {
+    if (watchOwnerId) return users?.find(u => u.id === watchOwnerId);
     const ownerName = form.watch("owner_name");
     return users?.find(u => u.name === ownerName || u.email === ownerName);
-  }, [users, form.watch("owner_name")]);
+  }, [users, watchOwnerId, form.watch("owner_name")]);
+
+  // Assigned users for this subscription (edit mode only)
+  const { data: assignedLicenses = [], refetch: refetchAssigned } = useQuery({
+    queryKey: ["subscription-assigned-users", editingTool?.id],
+    enabled: !!editingTool?.id && open,
+    staleTime: 15_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("subscriptions_licenses")
+        .select("id, assigned_to, assigned_to_name, assigned_to_email, status")
+        .eq("tool_id", editingTool!.id)
+        .eq("status", "assigned");
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const [assignUserOpen, setAssignUserOpen] = useState(false);
+
+  const handleAssignUser = useCallback(async (userId: string) => {
+    const user = users?.find(u => u.id === userId);
+    if (!user || !editingTool?.id) return;
+    // Check if already assigned
+    if (assignedLicenses.some(l => l.assigned_to === userId)) {
+      toast({ title: "Already assigned", description: `${user.name || user.email} already has a seat`, variant: "destructive" });
+      return;
+    }
+    const { error } = await supabase.from("subscriptions_licenses").insert({
+      tool_id: editingTool.id,
+      assigned_to: userId,
+      assigned_to_name: user.name || null,
+      assigned_to_email: user.email || null,
+      status: "assigned",
+      assigned_at: new Date().toISOString().split("T")[0],
+    });
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      refetchAssigned();
+      // Update quantity to match
+      const newCount = assignedLicenses.length + 1;
+      const currentQty = form.getValues("quantity");
+      if (newCount > currentQty) form.setValue("quantity", newCount);
+    }
+    setAssignUserOpen(false);
+  }, [users, editingTool, assignedLicenses, toast, refetchAssigned, form]);
+
+  const handleUnassignUser = useCallback(async (licenseId: string) => {
+    const { error } = await supabase.from("subscriptions_licenses").delete().eq("id", licenseId);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      refetchAssigned();
+    }
+  }, [toast, refetchAssigned]);
 
   const onSubmit = async (values: FormValues) => {
     setIsSubmitting(true);
@@ -232,8 +295,10 @@ export const AddToolDialog = ({ open, onOpenChange, onSuccess, editingTool }: Ad
       const currentRules = getSubscriptionFieldRules(values.category, values.subscription_type, values.status);
       const computedTotal = (values.quantity || 0) * (values.unit_cost || 0);
 
-      // Resolve owner email from user directory
-      const ownerUser = users?.find(u => u.name === values.owner_name || u.email === values.owner_name);
+      // Resolve owner from UUID or name fallback
+      const ownerUser = values.owner_id
+        ? users?.find(u => u.id === values.owner_id)
+        : users?.find(u => u.name === values.owner_name || u.email === values.owner_name);
 
       // Auto-calculate renewal_date and next_payment_date from purchase_date + type
       const calculatedRenewal = computeRenewalDate(values.purchase_date, values.subscription_type);
@@ -459,6 +524,65 @@ export const AddToolDialog = ({ open, onOpenChange, onSuccess, editingTool }: Ad
                     </FormItem>
                   </div>
 
+                  {/* Assigned Users Section — edit mode only */}
+                  {isEditing && editingTool?.id && (
+                    <Collapsible defaultOpen={assignedLicenses.length > 0}>
+                      <CollapsibleTrigger asChild>
+                        <Button type="button" variant="ghost" className="w-full justify-between h-8 px-2 text-xs font-medium">
+                          <span className="flex items-center gap-1.5">
+                            <Users className="h-3.5 w-3.5" />
+                            Assigned Users ({assignedLicenses.length})
+                          </span>
+                          <ChevronsUpDown className="h-3.5 w-3.5 opacity-50" />
+                        </Button>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="space-y-2 pt-1">
+                        {assignedLicenses.length > 0 && (
+                          <div className="space-y-1 max-h-32 overflow-y-auto">
+                            {assignedLicenses.map((lic) => (
+                              <div key={lic.id} className="flex items-center justify-between px-2 py-1 rounded border bg-muted/30 text-sm">
+                                <div className="flex flex-col min-w-0">
+                                  <span className="truncate text-xs font-medium">{lic.assigned_to_name || lic.assigned_to_email || "—"}</span>
+                                  {lic.assigned_to_name && lic.assigned_to_email && (
+                                    <span className="text-[10px] text-muted-foreground truncate">{lic.assigned_to_email}</span>
+                                  )}
+                                </div>
+                                <Button type="button" variant="ghost" size="sm" className="h-6 w-6 p-0 shrink-0" onClick={() => handleUnassignUser(lic.id)}>
+                                  <X className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <Popover open={assignUserOpen} onOpenChange={setAssignUserOpen}>
+                          <PopoverTrigger asChild>
+                            <Button type="button" variant="outline" size="sm" className="w-full h-7 text-xs gap-1">
+                              <Plus className="h-3 w-3" /> Assign User
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[320px] p-0" align="start">
+                            <Command>
+                              <CommandInput placeholder="Search users..." className="h-8 text-sm" />
+                              <CommandList>
+                                <CommandEmpty>No users found.</CommandEmpty>
+                                <CommandGroup>
+                                  {users?.filter(u => !assignedLicenses.some(l => l.assigned_to === u.id)).map((u) => (
+                                    <CommandItem key={u.id} value={`${u.name || ""} ${u.email}`} onSelect={() => handleAssignUser(u.id)} className="cursor-pointer text-sm">
+                                      <div className="flex flex-col">
+                                        <span>{u.name || "—"}</span>
+                                        <span className="text-xs text-muted-foreground">{u.email}</span>
+                                      </div>
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  )}
+
                   {/* Purchase Date - always shown */}
                   {rules.showPurchaseDate && (
                     <FormField
@@ -659,8 +783,8 @@ export const AddToolDialog = ({ open, onOpenChange, onSuccess, editingTool }: Ad
                               <Popover open={ownerPopoverOpen} onOpenChange={setOwnerPopoverOpen}>
                                 <PopoverTrigger asChild>
                                   <FormControl>
-                                    <Button type="button" variant="outline" role="combobox" className={cn("h-8 w-full justify-between text-sm font-normal", !field.value && "text-muted-foreground")}>
-                                      <span className="truncate">{field.value ? (users?.find(u => u.name === field.value)?.name || field.value) : "Select owner"}</span>
+                                    <Button type="button" variant="outline" role="combobox" className={cn("h-8 w-full justify-between text-sm font-normal", !selectedOwner && !field.value && "text-muted-foreground")}>
+                                      <span className="truncate">{selectedOwner ? (selectedOwner.name || selectedOwner.email) : field.value || "Select owner"}</span>
                                       <Search className="ml-1 h-3.5 w-3.5 shrink-0 opacity-50" />
                                     </Button>
                                   </FormControl>
@@ -672,12 +796,16 @@ export const AddToolDialog = ({ open, onOpenChange, onSuccess, editingTool }: Ad
                                       <CommandEmpty>No users found.</CommandEmpty>
                                       <CommandGroup>
                                         {users?.map((u) => (
-                                          <CommandItem key={u.id} value={`${u.name || ""} ${u.email}`} onSelect={() => { field.onChange(u.name || u.email); setOwnerPopoverOpen(false); }} className="text-sm">
+                                          <CommandItem key={u.id} value={`${u.name || ""} ${u.email}`} onSelect={() => {
+                                            form.setValue("owner_id", u.id);
+                                            field.onChange(u.name || u.email);
+                                            setOwnerPopoverOpen(false);
+                                          }} className="text-sm">
                                             <div className="flex flex-col">
                                               <span>{u.name || u.email}</span>
                                               {u.name && <span className="text-xs text-muted-foreground">{u.email}</span>}
                                             </div>
-                                            <Check className={cn("ml-auto h-3.5 w-3.5", field.value === u.name ? "opacity-100" : "opacity-0")} />
+                                            <Check className={cn("ml-auto h-3.5 w-3.5", watchOwnerId === u.id ? "opacity-100" : "opacity-0")} />
                                           </CommandItem>
                                         ))}
                                       </CommandGroup>

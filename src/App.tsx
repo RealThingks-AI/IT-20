@@ -91,7 +91,7 @@ const PODetail = lazy(() => import("./pages/helpdesk/assets/purchase-orders/po-d
 // Subscription pages
 const HelpdeskSubscriptionDashboard = lazy(() => import("./pages/helpdesk/subscription/dashboard"));
 const HelpdeskSubscriptionTools = lazy(() => import("./pages/helpdesk/subscription/tools"));
-const NewSubscription = lazy(() => import("./pages/helpdesk/subscription/new"));
+
 const SubscriptionAdvanced = lazy(() => import("./pages/helpdesk/subscription/advanced"));
 const SubscriptionDetail = lazy(() => import("./pages/helpdesk/subscription/detail/[subscriptionId]"));
 
@@ -234,7 +234,7 @@ const App = () => {
                   <Route element={<SubscriptionLayout />}>
                     <Route path="/subscription" element={<HelpdeskSubscriptionDashboard />} />
                     <Route path="/subscription/tools" element={<HelpdeskSubscriptionTools />} />
-                    <Route path="/subscription/new" element={<NewSubscription />} />
+                    <Route path="/subscription/new" element={<Navigate to="/subscription/tools" replace />} />
                     <Route path="/subscription/advanced" element={<SubscriptionAdvanced />} />
                     <Route path="/subscription/detail/:subscriptionId" element={<SubscriptionDetail />} />
                     {/* Legacy redirects */}

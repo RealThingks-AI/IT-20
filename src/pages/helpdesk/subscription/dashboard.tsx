@@ -175,7 +175,7 @@ export default function SubscriptionOverview() {
         {portalTarget && createPortal(topBarContent, portalTarget)}
         <div className="h-full overflow-y-auto p-3 space-y-3 animate-in fade-in duration-300">
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-            {Array.from({ length: 10 }).map((_, i) => (
+            {Array.from({ length: 6 }).map((_, i) => (
               <Skeleton key={i} className="h-[72px] rounded-lg" />
             ))}
           </div>

@@ -60,7 +60,7 @@ export const AddLicenseDialog = ({ open, onOpenChange, onSuccess, editingLicense
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      tool_id: "", license_key: "", status: "available",
+      tool_id: "", license_key: "", status: "assigned",
       user_id: "", assigned_to_name: "", assigned_to_email: "", assigned_at: "", expires_at: "",
     },
   });
@@ -83,7 +83,7 @@ export const AddLicenseDialog = ({ open, onOpenChange, onSuccess, editingLicense
       });
     } else {
       form.reset({
-        tool_id: defaultToolId || "", license_key: "", status: "available",
+        tool_id: defaultToolId || "", license_key: "", status: "assigned",
         user_id: "", assigned_to_name: "", assigned_to_email: "", assigned_at: "", expires_at: "",
       });
     }
